@@ -584,12 +584,11 @@ function buildHtml(){
       let attrs = "";
       if (m?.rowspan > 1) attrs += ` rowspan=${m.rowspan}`;
       if (m?.colspan > 1) attrs += ` colspan=${m.colspan}`;
-      // 舊式後台可能移除 colgroup；首列再寫一份寬度，避免貼上後變成平均欄寬。
-      if (ri === 0){
-        const span=m?.colspan||1;
-        const cellWidth=scaledWidths.slice(ci,ci+span).reduce((sum,width)=>sum+width,0);
-        attrs += ` width="${widthAttr(cellWidth)}" style="width:${widthCss(cellWidth)}"`;
-      }
+      // 舊式後台可能移除 colgroup，甚至依無寬度的內容列重新平均分配。
+      // 每個可見儲存格都重複寫入寬度；合併格使用涵蓋欄位的合計寬度。
+      const span=m?.colspan||1;
+      const cellWidth=scaledWidths.slice(ci,ci+span).reduce((sum,width)=>sum+width,0);
+      attrs += ` width="${widthAttr(cellWidth)}" style="width:${widthCss(cellWidth)}"`;
       html += `<${tag}${attrs}>${textWithBreaks(rows[ri][ci])}</${tag}>`;
     }
     html += `</tr>`;
