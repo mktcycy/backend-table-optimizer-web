@@ -36,11 +36,19 @@ function esc(v){
   return String(v ?? "").replace(/[&<>\"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
 }
 
+function breakLongSeparatorRuns(v){
+  return String(v ?? "").replace(/[‐‑‒–—―_＿─━═⎯-]{6,}/g, run => run.replace(/(.{4})(?=.)/g, "$1\u200B"));
+}
+
 function textWithBreaks(v){
-  return esc(String(v ?? "").replace(/\\n/g, "\n"))
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .replace(/\n/g, "<br>");
+  const lines=String(v ?? "").replace(/\\n/g, "\n").replace(/\r\n?/g, "\n").split("\n");
+  const separatorLine=/^[‐‑‒–—―_＿─━═⎯-]{6,}$/;
+  return lines.map((line,index)=>{
+    const divider=separatorLine.test(line.trim());
+    const previousDivider=index>0&&separatorLine.test(lines[index-1].trim());
+    const prefix=index>0&&!divider&&!previousDivider?"<br>":"";
+    return divider?'<span style="display:block;border-top:1px solid;margin:3px 0"></span>':prefix+esc(breakLongSeparatorRuns(line));
+  }).join("");
 }
 
 function normalizeHex(v, fallback){
@@ -495,7 +503,7 @@ function buildHtml(){
   });
 
   // 精簡輸出：共用樣式只寫一次，降低 65,536 Byte 壓力。
-  let html = `<table border=1 cellspacing=0 cellpadding=${pad} width=${tableWidth} bordercolor=${bc} bgcolor=${bbg} style="width:${tableWidth}px;max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed;text-align:${align};color:${btx};font:${size}px ${compactFontFamily()}">`;
+  let html = `<table border=1 cellspacing=0 cellpadding=${pad} width=${tableWidth} bordercolor=${bc} bgcolor=${bbg} style="width:${tableWidth}px;max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed;overflow-wrap:anywhere;word-break:break-all;text-align:${align};color:${btx};font:${size}px ${compactFontFamily()}">`;
   html += `<colgroup>${scaledWidths.map(width=>`<col width=${width}>`).join("")}</colgroup>`;
   for (let ri=0; ri<rows.length; ri++){
     const headerRow = firstHeader && ri === 0;
