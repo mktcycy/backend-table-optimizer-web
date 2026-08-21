@@ -2,11 +2,12 @@ const LIMIT_BYTES = 65536;
 const SAFE_BYTES = 60000;
 const STORAGE_KEY = "backendTableOptimizerWebState";
 const DEFAULT_COLUMN_WIDTH = 150;
-const MIN_COLUMN_WIDTH = 80;
-const MAX_COLUMN_WIDTH = 520;
+const MIN_COLUMN_WIDTH = 40;
+const MAX_COLUMN_WIDTH = 1200;
 
 const DEFAULT_STYLE = {
   tableWidth: 1000,
+  tableWidthUnit: "px",
   headerBg: "#EAF4FF",
   headerText: "#168CFF",
   bodyBg: "#FFFFFF",
@@ -58,6 +59,51 @@ function normalizeHex(v, fallback){
 
 function clampWidth(v){
   return Math.max(200, Math.min(1000, Number(v) || 1000));
+}
+
+function clampPercentWidth(v){
+  return Math.max(10,Math.min(100,Number(v)||100));
+}
+
+function formatPercent(v){
+  return Number(Number(v||0).toFixed(1)).toString();
+}
+
+function columnWidthTotal(){
+  return columnWidths.reduce((sum,width)=>sum+width,0)||1;
+}
+
+function columnPercentage(ci){
+  return columnWidths[ci]/columnWidthTotal()*100;
+}
+
+function selectedPercentage(indexes){
+  const selectedTotal=indexes.reduce((sum,ci)=>sum+columnWidths[ci],0);
+  return selectedTotal/columnWidthTotal()*100;
+}
+
+function displayedColumnPercentages(){
+  const total=columnWidthTotal();
+  let remaining=1000;
+  return columnWidths.map((width,index)=>{
+    if (index===columnWidths.length-1) return remaining/10;
+    const columnsAfter=columnWidths.length-index-1;
+    const units=Math.max(1,Math.min(remaining-columnsAfter,Math.round(1000*width/total)));
+    remaining-=units;
+    return units/10;
+  });
+}
+
+function selectedPercentageBounds(indexes){
+  if (indexes.length===columnWidths.length) return {min:100,max:100};
+  const total=columnWidthTotal();
+  const selectedCount=indexes.length;
+  const otherCount=columnWidths.length-selectedCount;
+  const minTarget=Math.max(selectedCount*MIN_COLUMN_WIDTH,total-otherCount*MAX_COLUMN_WIDTH);
+  const maxTarget=Math.min(selectedCount*MAX_COLUMN_WIDTH,total-otherCount*MIN_COLUMN_WIDTH);
+  const min=Math.max(1,Math.ceil(minTarget/total*1000)/10);
+  const max=Math.min(99,Math.floor(maxTarget/total*1000)/10);
+  return {min:Math.min(min,max),max:Math.max(min,max)};
 }
 
 function clampColumnWidth(v){
@@ -153,29 +199,35 @@ function updateColumnWidthControls(){
   controlled.forEach(el=>{el.disabled=disabled;});
   if (disabled){
     input.value="";
-    input.placeholder="欄寬";
-    $("columnWidthHint").textContent="先選一格或點欄標題，也可直接拖曳欄標題右側把手。";
+    input.placeholder="比例";
+    input.min="1";
+    input.max="100";
+    $("columnWidthHint").textContent="先選一格或點欄標題，可輸入百分比或拖曳欄標題右側把手。";
     return;
   }
-  const widths=indexes.map(ci=>columnWidths[ci]);
-  const same=widths.every(width=>width===widths[0]);
-  input.value=same?String(widths[0]):"";
-  input.placeholder=same?"欄寬":"多個寬度";
+  const percent=selectedPercentage(indexes);
+  const bounds=selectedPercentageBounds(indexes);
+  input.min=formatPercent(bounds.min);
+  input.max=formatPercent(bounds.max);
+  input.value=formatPercent(percent);
+  input.placeholder="比例";
   const range=indexes.length===1?`${colName(indexes[0])} 欄`:`${colName(indexes[0])}～${colName(indexes.at(-1))} 欄`;
-  $("columnWidthHint").textContent=`已選 ${range}${same?`，目前 ${widths[0]}px`:"，輸入數值可統一寬度"}。`;
+  const combined=indexes.length>1?"合計 ":"";
+  $("columnWidthHint").textContent=`已選 ${range}，目前${combined}${formatPercent(percent)}%。其餘欄位會自動重新分配。`;
 }
 
 function applyEditorColumnWidths(){
   const table=$("editGrid");
-  table.style.width=`${44+columnWidths.reduce((sum,width)=>sum+width,0)}px`;
+  const percentages=displayedColumnPercentages();
+  table.style.width=`${44+Math.round(columnWidths.reduce((sum,width)=>sum+width,0))}px`;
   table.querySelectorAll("col[data-col]").forEach(col=>{
     const ci=Number(col.dataset.col);
-    col.style.width=`${columnWidths[ci]}px`;
+    col.style.width=`${Math.round(columnWidths[ci])}px`;
   });
   table.querySelectorAll(".col-head[data-col]").forEach(th=>{
     const ci=Number(th.dataset.col);
     const label=th.querySelector(".col-width-value");
-    if (label) label.textContent=`${columnWidths[ci]}px`;
+    if (label) label.textContent=`${formatPercent(percentages[ci])}%`;
   });
 }
 
@@ -187,32 +239,42 @@ function finishColumnWidthChange(message){
   if (message) setStatus(message);
 }
 
-function applyWidthToSelected(value){
+function applyPercentageToSelected(value){
   const indexes=selectedColumnIndexes();
   if (!indexes.length) return setStatus("請先選取要調整的欄。",true);
-  const width=clampColumnWidth(value);
-  indexes.forEach(ci=>{columnWidths[ci]=width;});
-  finishColumnWidthChange(`已將 ${indexes.length} 欄寬度設為 ${width}px`);
+  const bounds=selectedPercentageBounds(indexes);
+  const percent=Math.max(bounds.min,Math.min(bounds.max,Number(value)||bounds.min));
+  if (indexes.length===columnWidths.length){
+    updateColumnWidthControls();
+    return setStatus("全部欄位的合計比例固定為 100%。");
+  }
+  const selectedSet=new Set(indexes);
+  const total=columnWidthTotal();
+  const currentSelected=indexes.reduce((sum,ci)=>sum+columnWidths[ci],0)||1;
+  const currentOthers=Math.max(1,total-currentSelected);
+  const targetSelected=total*percent/100;
+  const targetOthers=total-targetSelected;
+  columnWidths=columnWidths.map((width,ci)=>selectedSet.has(ci)?width*targetSelected/currentSelected:width*targetOthers/currentOthers);
+  const range=indexes.length===1?`${colName(indexes[0])} 欄`:`${colName(indexes[0])}～${colName(indexes.at(-1))} 欄`;
+  finishColumnWidthChange(`已將 ${range}比例設為 ${formatPercent(percent)}%`);
 }
 
-function stepSelectedWidths(delta){
+function stepSelectedPercentages(delta){
   const indexes=selectedColumnIndexes();
   if (!indexes.length) return setStatus("請先選取要調整的欄。",true);
-  indexes.forEach(ci=>{columnWidths[ci]=clampColumnWidth(columnWidths[ci]+delta);});
-  finishColumnWidthChange(`已${delta>0?"放大":"縮小"}選取欄寬`);
+  applyPercentageToSelected(selectedPercentage(indexes)+delta);
 }
 
 function fitSelectedColumns(){
   const indexes=selectedColumnIndexes();
   if (!indexes.length) return setStatus("請先選取要依內容調整的欄。",true);
   indexes.forEach(ci=>{columnWidths[ci]=estimateColumnWidth(rows,ci);});
-  finishColumnWidthChange(`已依內容調整 ${indexes.length} 欄寬度`);
+  finishColumnWidthChange(`已依內容重新估算 ${indexes.length} 欄比例`);
 }
 
 function equalizeColumns(){
-  const target=clampColumnWidth(Math.round(clampWidth(styleSettings.tableWidth)/rows[0].length));
-  columnWidths=columnWidths.map(()=>target);
-  finishColumnWidthChange(`已平均分配全部欄寬（每欄 ${target}px）`);
+  columnWidths=columnWidths.map(()=>DEFAULT_COLUMN_WIDTH);
+  finishColumnWidthChange(`已平均分配全部欄寬（每欄 ${formatPercent(100/rows[0].length)}%）`);
 }
 
 function beginColumnResize(event,ci,handle){
@@ -234,8 +296,9 @@ function beginColumnResize(event,ci,handle){
     document.removeEventListener("pointerup",finish);
     document.removeEventListener("pointercancel",finish);
     handle.classList.remove("dragging");
-    handle.setAttribute("aria-label",`調整 ${colName(ci)} 欄寬度，目前 ${columnWidths[ci]}px`);
-    finishColumnWidthChange(`${colName(ci)} 欄寬度已設為 ${columnWidths[ci]}px`);
+    const percent=formatPercent(displayedColumnPercentages()[ci]);
+    handle.setAttribute("aria-label",`調整 ${colName(ci)} 欄寬度，目前 ${percent}%`);
+    finishColumnWidthChange(`${colName(ci)} 欄寬度已設為 ${percent}%`);
   };
   document.addEventListener("pointermove",move);
   document.addEventListener("pointerup",finish);
@@ -247,6 +310,7 @@ function renderGrid(){
   const table = $("editGrid");
   table.innerHTML = "";
   const width = rows[0].length;
+  const displayedPercentages=displayedColumnPercentages();
 
   const colgroup=document.createElement("colgroup");
   const rowNumberCol=document.createElement("col");
@@ -255,7 +319,7 @@ function renderGrid(){
   for(let ci=0;ci<width;ci++){
     const col=document.createElement("col");
     col.dataset.col=ci;
-    col.style.width=`${columnWidths[ci]}px`;
+    col.style.width=`${Math.round(columnWidths[ci])}px`;
     colgroup.appendChild(col);
   }
   table.appendChild(colgroup);
@@ -278,14 +342,14 @@ function renderGrid(){
     colTitle.textContent=colName(ci);
     const widthValue=document.createElement("span");
     widthValue.className="col-width-value";
-    widthValue.textContent=`${columnWidths[ci]}px`;
+    widthValue.textContent=`${formatPercent(displayedPercentages[ci])}%`;
     headContent.append(colTitle,widthValue);
     const resizer=document.createElement("span");
     resizer.className="col-resizer";
     resizer.tabIndex=0;
     resizer.setAttribute("role","separator");
     resizer.setAttribute("aria-orientation","vertical");
-    resizer.setAttribute("aria-label",`調整 ${colName(ci)} 欄寬度，目前 ${columnWidths[ci]}px`);
+    resizer.setAttribute("aria-label",`調整 ${colName(ci)} 欄寬度，目前 ${formatPercent(displayedPercentages[ci])}%`);
     resizer.addEventListener("pointerdown",event=>beginColumnResize(event,ci,resizer));
     resizer.addEventListener("click",event=>event.stopPropagation());
     resizer.addEventListener("keydown",event=>{
@@ -293,11 +357,10 @@ function renderGrid(){
       event.preventDefault();
       event.stopPropagation();
       selection={anchor:{r:0,c:ci},focus:{r:rows.length-1,c:ci}};
-      columnWidths[ci]=clampColumnWidth(columnWidths[ci]+(event.key==="ArrowRight"?10:-10));
       updateSelectionStyles();
       updateSelectionInfo();
-      finishColumnWidthChange(`${colName(ci)} 欄寬度已設為 ${columnWidths[ci]}px`);
-      resizer.setAttribute("aria-label",`調整 ${colName(ci)} 欄寬度，目前 ${columnWidths[ci]}px`);
+      applyPercentageToSelected(columnPercentage(ci)+(event.key==="ArrowRight"?1:-1));
+      resizer.setAttribute("aria-label",`調整 ${colName(ci)} 欄寬度，目前 ${formatPercent(displayedColumnPercentages()[ci])}%`);
     });
     th.append(headContent,resizer);
     th.addEventListener("click", event => {
@@ -490,21 +553,27 @@ function buildHtml(){
   const size = Math.max(10,Math.min(24,Number(styleSettings.fontSize)||14));
   const pad = Math.max(0,Math.min(20,Number(styleSettings.cellPadding)||4));
   const align = ["left","right","center"].includes(styleSettings.textAlign) ? styleSettings.textAlign : "center";
-  const tableWidth = clampWidth(styleSettings.tableWidth);
+  const percentMode=styleSettings.tableWidthUnit==="percent";
+  const tableWidth=percentMode?clampPercentWidth(styleSettings.tableWidth):clampWidth(styleSettings.tableWidth);
+  const tableWidthToken=`${formatPercent(tableWidth)}${percentMode?"%":"px"}`;
+  const tableWidthAttr=percentMode?`${formatPercent(tableWidth)}%`:String(tableWidth);
   const firstHeader = $("firstHeader").checked;
   const widthTotal=columnWidths.reduce((sum,width)=>sum+width,0)||1;
-  let remainingWidth=tableWidth;
+  const scaleTotal=percentMode?1000:tableWidth;
+  let remainingWidth=scaleTotal;
   const scaledWidths=columnWidths.map((width,index)=>{
     const columnsAfter=columnWidths.length-index-1;
     if (!columnsAfter) return Math.max(1,remainingWidth);
-    const scaled=Math.max(1,Math.min(remainingWidth-columnsAfter,Math.round(tableWidth*width/widthTotal)));
+    const scaled=Math.max(1,Math.min(remainingWidth-columnsAfter,Math.round(scaleTotal*width/widthTotal)));
     remainingWidth-=scaled;
     return scaled;
   });
+  const widthAttr=value=>percentMode?`${formatPercent(value/10)}%`:String(value);
+  const widthCss=value=>percentMode?`${formatPercent(value/10)}%`:`${value}px`;
 
   // 精簡輸出：共用樣式只寫一次，降低 65,536 Byte 壓力。
-  let html = `<table border=1 cellspacing=0 cellpadding=${pad} width=${tableWidth} bordercolor=${bc} bgcolor=${bbg} style="width:${tableWidth}px;max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed;overflow-wrap:anywhere;word-break:break-all;text-align:${align};color:${btx};font:${size}px ${compactFontFamily()}">`;
-  html += `<colgroup>${scaledWidths.map(width=>`<col width=${width} style="width:${width}px">`).join("")}</colgroup>`;
+  let html = `<table border=1 cellspacing=0 cellpadding=${pad} width="${tableWidthAttr}" bordercolor=${bc} bgcolor=${bbg} style="width:${tableWidthToken};max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed;overflow-wrap:anywhere;word-break:break-all;text-align:${align};color:${btx};font:${size}px ${compactFontFamily()}">`;
+  html += `<colgroup>${scaledWidths.map(width=>`<col width="${widthAttr(width)}" style="width:${widthCss(width)}">`).join("")}</colgroup>`;
   for (let ri=0; ri<rows.length; ri++){
     const headerRow = firstHeader && ri === 0;
     html += headerRow ? `<tr bgcolor=${hbg} style="color:${htx};font-weight:700">` : `<tr>`;
@@ -519,7 +588,7 @@ function buildHtml(){
       if (ri === 0){
         const span=m?.colspan||1;
         const cellWidth=scaledWidths.slice(ci,ci+span).reduce((sum,width)=>sum+width,0);
-        attrs += ` width=${cellWidth} style="width:${cellWidth}px"`;
+        attrs += ` width="${widthAttr(cellWidth)}" style="width:${widthCss(cellWidth)}"`;
       }
       html += `<${tag}${attrs}>${textWithBreaks(rows[ri][ci])}</${tag}>`;
     }
@@ -565,7 +634,7 @@ function renderPreview(){
 
 function currentState(){
   return {
-    schemaVersion:12,
+    schemaVersion:13,
     rows,
     merges,
     columnWidths,
@@ -585,9 +654,21 @@ function saveState(){
   }
 }
 
+function updateTableWidthUi(){
+  const input=$("tableWidth");
+  const percentMode=$("tableWidthUnit").value==="percent";
+  input.min=percentMode?"10":"200";
+  input.max=percentMode?"100":"1000";
+  input.step=percentMode?"5":"50";
+  const value=percentMode?clampPercentWidth(input.value):clampWidth(input.value);
+  $("previewWidthHint").textContent=percentMode?`表格寬度為 ${formatPercent(value)}%；會隨後台內容區縮放。`:`實際寬度 ${value}px；寬表格可在預覽區左右捲動。`;
+}
+
 function pullStyle(){
+  const tableWidthUnit=$("tableWidthUnit").value==="percent"?"percent":"px";
   styleSettings = {
-    tableWidth:clampWidth($("tableWidth").value),
+    tableWidth:tableWidthUnit==="percent"?clampPercentWidth($("tableWidth").value):clampWidth($("tableWidth").value),
+    tableWidthUnit,
     headerBg:$("headerBg").value,
     headerText:$("headerText").value,
     bodyBg:$("bodyBg").value,
@@ -600,7 +681,9 @@ function pullStyle(){
 }
 
 function applyStyleInputs(){
-  $("tableWidth").value = clampWidth(styleSettings.tableWidth);
+  const tableWidthUnit=styleSettings.tableWidthUnit==="percent"?"percent":"px";
+  $("tableWidthUnit").value=tableWidthUnit;
+  $("tableWidth").value=tableWidthUnit==="percent"?clampPercentWidth(styleSettings.tableWidth):clampWidth(styleSettings.tableWidth);
   $("headerBg").value = styleSettings.headerBg || DEFAULT_STYLE.headerBg;
   $("headerText").value = styleSettings.headerText || DEFAULT_STYLE.headerText;
   $("bodyBg").value = styleSettings.bodyBg || DEFAULT_STYLE.bodyBg;
@@ -609,6 +692,7 @@ function applyStyleInputs(){
   $("fontSize").value = styleSettings.fontSize || 14;
   $("textAlign").value = styleSettings.textAlign || "center";
   $("cellPadding").value = styleSettings.cellPadding ?? 4;
+  updateTableWidthUi();
 }
 
 function loadState(){
@@ -838,21 +922,31 @@ $("unmerge").addEventListener("click",unmergeSelection);
 $("clearTable").addEventListener("click",()=>{rows=blankMatrix(4,4);columnWidths=Array(4).fill(DEFAULT_COLUMN_WIDTH);merges=[];selection=null;$("bulkPaste").value="";updatePasteInfo([]);renderGrid();renderPreview();saveState();setStatus("已清空並建立 4 × 4 空白表格");});
 
 $("selectedColWidth").addEventListener("input",event=>{
-  const width=Number(event.target.value);
-  if (width>=MIN_COLUMN_WIDTH&&width<=MAX_COLUMN_WIDTH) applyWidthToSelected(width);
+  const percent=Number(event.target.value);
+  if (percent>=Number(event.target.min)&&percent<=Number(event.target.max)) applyPercentageToSelected(percent);
 });
 $("selectedColWidth").addEventListener("change",event=>{
-  if (event.target.value!=="") applyWidthToSelected(event.target.value);
+  if (event.target.value!=="") applyPercentageToSelected(event.target.value);
 });
-$("colWidthDecrease").addEventListener("click",()=>stepSelectedWidths(-10));
-$("colWidthIncrease").addEventListener("click",()=>stepSelectedWidths(10));
+$("colWidthDecrease").addEventListener("click",()=>stepSelectedPercentages(-1));
+$("colWidthIncrease").addEventListener("click",()=>stepSelectedPercentages(1));
 $("fitSelectedCols").addEventListener("click",fitSelectedColumns);
 $("equalizeCols").addEventListener("click",equalizeColumns);
 
 $("firstHeader").addEventListener("change",()=>{renderPreview();saveState();});
-["tableWidth","headerBg","headerText","bodyBg","bodyText","borderColor","fontSize","textAlign","cellPadding"].forEach(id=>$(id).addEventListener("input",()=>{pullStyle();renderPreview();saveState();}));
+["tableWidth","headerBg","headerText","bodyBg","bodyText","borderColor","fontSize","textAlign","cellPadding"].forEach(id=>$(id).addEventListener("input",()=>{pullStyle();updateTableWidthUi();renderPreview();saveState();}));
+$("tableWidthUnit").addEventListener("change",()=>{
+  const percentMode=$("tableWidthUnit").value==="percent";
+  $("tableWidth").value=percentMode?"100":"1000";
+  pullStyle();updateTableWidthUi();renderPreview();saveState();
+  setStatus(`表格總寬度已切換為 ${percentMode?"百分比":"像素"}模式`);
+});
 document.querySelectorAll(".width-preset").forEach(btn=>btn.addEventListener("click",()=>{
-  $("tableWidth").value=btn.dataset.width; pullStyle(); renderPreview(); saveState(); setStatus(`表格寬度已設為 ${btn.dataset.width}px`);
+  const unit=btn.dataset.unit==="percent"?"percent":"px";
+  $("tableWidthUnit").value=unit;
+  $("tableWidth").value=btn.dataset.width;
+  pullStyle();updateTableWidthUi();renderPreview();saveState();
+  setStatus(`表格寬度已設為 ${btn.dataset.width}${unit==="percent"?"%":"px"}`);
 }));
 $("copyRich").addEventListener("click",copyRich);
 
