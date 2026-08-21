@@ -2,10 +2,13 @@
 
 將 Excel、Google 試算表、Numbers 或一般網頁表格整理成適合舊式後台富文字編輯器使用的精簡 HTML 表格。
 
+線上使用：[https://mktcycy.github.io/backend-table-optimizer-web/](https://mktcycy.github.io/backend-table-optimizer-web/)
+
 ## 功能
 
 - 貼上試算表或網頁表格，保留格內換行與合併儲存格
 - 新增、刪除列欄，支援範圍選取與儲存格合併
+- 支援拖曳欄標題調整每欄寬度，也可輸入 px、依內容適寬或平均分配
 - 自訂表格寬度、顏色、字級、對齊與間距
 - 即時預覽並估算 65,536 Byte 容量限制
 - 一鍵複製富文字表格與純文字備援
