@@ -1,6 +1,9 @@
 const LIMIT_BYTES = 65536;
 const SAFE_BYTES = 60000;
 const STORAGE_KEY = "backendTableOptimizerWebState";
+const DEFAULT_COLUMN_WIDTH = 150;
+const MIN_COLUMN_WIDTH = 80;
+const MAX_COLUMN_WIDTH = 520;
 
 const DEFAULT_STYLE = {
   tableWidth: 1000,
@@ -20,6 +23,7 @@ let selection = null;
 let pendingMatrix = null;
 let pendingMerges = [];
 let styleSettings = {...DEFAULT_STYLE};
+let columnWidths = Array(4).fill(DEFAULT_COLUMN_WIDTH);
 let storageAvailable = true;
 
 const $ = id => document.getElementById(id);
@@ -48,10 +52,30 @@ function clampWidth(v){
   return Math.max(200, Math.min(1000, Number(v) || 1000));
 }
 
+function clampColumnWidth(v){
+  return Math.max(MIN_COLUMN_WIDTH,Math.min(MAX_COLUMN_WIDTH,Math.round(Number(v)||DEFAULT_COLUMN_WIDTH)));
+}
+
+function textDisplayUnits(value){
+  return [...String(value??"")].reduce((sum,ch)=>sum+(/[\u2e80-\u9fff\uff00-\uffef]/.test(ch)?2:1),0);
+}
+
+function estimateColumnWidth(matrix,ci){
+  let longest=0;
+  matrix.forEach(row=>String(row?.[ci]??"").split(/\r?\n/).forEach(line=>{longest=Math.max(longest,textDisplayUnits(line));}));
+  return clampColumnWidth(Math.max(100,Math.min(360,longest*7+34)));
+}
+
+function autoColumnWidths(matrix){
+  const width=Math.max(1,...matrix.map(row=>row?.length||0));
+  return Array.from({length:width},(_,ci)=>estimateColumnWidth(matrix,ci));
+}
+
 function ensureShape(){
   if (!Array.isArray(rows) || !rows.length) rows = [[""]];
   const width = Math.max(1, ...rows.map(r => Array.isArray(r) ? r.length : 0));
   rows = rows.map(r => Array.from({length:width}, (_,i) => String((r || [])[i] ?? "")));
+  columnWidths = Array.from({length:width},(_,i)=>clampColumnWidth(columnWidths?.[i]??DEFAULT_COLUMN_WIDTH));
   merges = (merges || []).filter(m => m && Number.isInteger(m.r) && Number.isInteger(m.c) && Number.isInteger(m.rowspan) && Number.isInteger(m.colspan) && m.r >= 0 && m.c >= 0 && m.rowspan >= 1 && m.colspan >= 1 && m.r + m.rowspan <= rows.length && m.c + m.colspan <= width);
 }
 
@@ -84,10 +108,11 @@ function colName(n){
 
 function updateSelectionInfo(){
   const s = normalizedSelection();
-  if (!s){ $("selectionInfo").textContent = "未選取儲存格"; return; }
+  if (!s){ $("selectionInfo").textContent = "未選取儲存格"; updateColumnWidthControls(); return; }
   const start = `${colName(s.c1)}${s.r1+1}`;
   const end = `${colName(s.c2)}${s.r2+1}`;
   $("selectionInfo").textContent = start === end ? `已選 ${start}` : `已選 ${start} ～ ${end}`;
+  updateColumnWidthControls();
 }
 
 function selectCell(r,c,shift=false){
@@ -106,11 +131,126 @@ function updateSelectionStyles(){
   });
 }
 
+function selectedColumnIndexes(){
+  const s=normalizedSelection();
+  if (!s) return [];
+  return Array.from({length:s.c2-s.c1+1},(_,i)=>s.c1+i);
+}
+
+function updateColumnWidthControls(){
+  const indexes=selectedColumnIndexes();
+  const input=$("selectedColWidth");
+  const controlled=["selectedColWidth","colWidthDecrease","colWidthIncrease","fitSelectedCols"].map($);
+  const disabled=!indexes.length;
+  controlled.forEach(el=>{el.disabled=disabled;});
+  if (disabled){
+    input.value="";
+    input.placeholder="欄寬";
+    $("columnWidthHint").textContent="先選一格或點欄標題，也可直接拖曳欄標題右側把手。";
+    return;
+  }
+  const widths=indexes.map(ci=>columnWidths[ci]);
+  const same=widths.every(width=>width===widths[0]);
+  input.value=same?String(widths[0]):"";
+  input.placeholder=same?"欄寬":"多個寬度";
+  const range=indexes.length===1?`${colName(indexes[0])} 欄`:`${colName(indexes[0])}～${colName(indexes.at(-1))} 欄`;
+  $("columnWidthHint").textContent=`已選 ${range}${same?`，目前 ${widths[0]}px`:"，輸入數值可統一寬度"}。`;
+}
+
+function applyEditorColumnWidths(){
+  const table=$("editGrid");
+  table.style.width=`${44+columnWidths.reduce((sum,width)=>sum+width,0)}px`;
+  table.querySelectorAll("col[data-col]").forEach(col=>{
+    const ci=Number(col.dataset.col);
+    col.style.width=`${columnWidths[ci]}px`;
+  });
+  table.querySelectorAll(".col-head[data-col]").forEach(th=>{
+    const ci=Number(th.dataset.col);
+    const label=th.querySelector(".col-width-value");
+    if (label) label.textContent=`${columnWidths[ci]}px`;
+  });
+}
+
+function finishColumnWidthChange(message){
+  applyEditorColumnWidths();
+  updateColumnWidthControls();
+  renderPreview();
+  saveState();
+  if (message) setStatus(message);
+}
+
+function applyWidthToSelected(value){
+  const indexes=selectedColumnIndexes();
+  if (!indexes.length) return setStatus("請先選取要調整的欄。",true);
+  const width=clampColumnWidth(value);
+  indexes.forEach(ci=>{columnWidths[ci]=width;});
+  finishColumnWidthChange(`已將 ${indexes.length} 欄寬度設為 ${width}px`);
+}
+
+function stepSelectedWidths(delta){
+  const indexes=selectedColumnIndexes();
+  if (!indexes.length) return setStatus("請先選取要調整的欄。",true);
+  indexes.forEach(ci=>{columnWidths[ci]=clampColumnWidth(columnWidths[ci]+delta);});
+  finishColumnWidthChange(`已${delta>0?"放大":"縮小"}選取欄寬`);
+}
+
+function fitSelectedColumns(){
+  const indexes=selectedColumnIndexes();
+  if (!indexes.length) return setStatus("請先選取要依內容調整的欄。",true);
+  indexes.forEach(ci=>{columnWidths[ci]=estimateColumnWidth(rows,ci);});
+  finishColumnWidthChange(`已依內容調整 ${indexes.length} 欄寬度`);
+}
+
+function equalizeColumns(){
+  const target=clampColumnWidth(Math.round(clampWidth(styleSettings.tableWidth)/rows[0].length));
+  columnWidths=columnWidths.map(()=>target);
+  finishColumnWidthChange(`已平均分配全部欄寬（每欄 ${target}px）`);
+}
+
+function beginColumnResize(event,ci,handle){
+  event.preventDefault();
+  event.stopPropagation();
+  selection={anchor:{r:0,c:ci},focus:{r:rows.length-1,c:ci}};
+  updateSelectionStyles();
+  updateSelectionInfo();
+  const startX=event.clientX;
+  const startWidth=columnWidths[ci];
+  handle.classList.add("dragging");
+  const move=moveEvent=>{
+    columnWidths[ci]=clampColumnWidth(startWidth+moveEvent.clientX-startX);
+    applyEditorColumnWidths();
+    updateColumnWidthControls();
+  };
+  const finish=()=>{
+    document.removeEventListener("pointermove",move);
+    document.removeEventListener("pointerup",finish);
+    document.removeEventListener("pointercancel",finish);
+    handle.classList.remove("dragging");
+    handle.setAttribute("aria-label",`調整 ${colName(ci)} 欄寬度，目前 ${columnWidths[ci]}px`);
+    finishColumnWidthChange(`${colName(ci)} 欄寬度已設為 ${columnWidths[ci]}px`);
+  };
+  document.addEventListener("pointermove",move);
+  document.addEventListener("pointerup",finish);
+  document.addEventListener("pointercancel",finish);
+}
+
 function renderGrid(){
   ensureShape();
   const table = $("editGrid");
   table.innerHTML = "";
   const width = rows[0].length;
+
+  const colgroup=document.createElement("colgroup");
+  const rowNumberCol=document.createElement("col");
+  rowNumberCol.style.width="44px";
+  colgroup.appendChild(rowNumberCol);
+  for(let ci=0;ci<width;ci++){
+    const col=document.createElement("col");
+    col.dataset.col=ci;
+    col.style.width=`${columnWidths[ci]}px`;
+    colgroup.appendChild(col);
+  }
+  table.appendChild(colgroup);
 
   const thead = document.createElement("thead");
   const headerTr = document.createElement("tr");
@@ -121,10 +261,41 @@ function renderGrid(){
   for (let ci=0; ci<width; ci++){
     const th = document.createElement("th");
     th.className = "col-head";
-    th.textContent = colName(ci);
+    th.dataset.col=ci;
     th.title = `第 ${ci+1} 欄（點擊可選整欄）`;
-    th.addEventListener("click", () => {
-      selection = {anchor:{r:0,c:ci},focus:{r:rows.length-1,c:ci}};
+    const headContent=document.createElement("div");
+    headContent.className="col-head-content";
+    const colTitle=document.createElement("span");
+    colTitle.className="col-title";
+    colTitle.textContent=colName(ci);
+    const widthValue=document.createElement("span");
+    widthValue.className="col-width-value";
+    widthValue.textContent=`${columnWidths[ci]}px`;
+    headContent.append(colTitle,widthValue);
+    const resizer=document.createElement("span");
+    resizer.className="col-resizer";
+    resizer.tabIndex=0;
+    resizer.setAttribute("role","separator");
+    resizer.setAttribute("aria-orientation","vertical");
+    resizer.setAttribute("aria-label",`調整 ${colName(ci)} 欄寬度，目前 ${columnWidths[ci]}px`);
+    resizer.addEventListener("pointerdown",event=>beginColumnResize(event,ci,resizer));
+    resizer.addEventListener("click",event=>event.stopPropagation());
+    resizer.addEventListener("keydown",event=>{
+      if (!["ArrowLeft","ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      selection={anchor:{r:0,c:ci},focus:{r:rows.length-1,c:ci}};
+      columnWidths[ci]=clampColumnWidth(columnWidths[ci]+(event.key==="ArrowRight"?10:-10));
+      updateSelectionStyles();
+      updateSelectionInfo();
+      finishColumnWidthChange(`${colName(ci)} 欄寬度已設為 ${columnWidths[ci]}px`);
+      resizer.setAttribute("aria-label",`調整 ${colName(ci)} 欄寬度，目前 ${columnWidths[ci]}px`);
+    });
+    th.append(headContent,resizer);
+    th.addEventListener("click", event => {
+      if (event.shiftKey && selection?.anchor){
+        selection={anchor:{r:0,c:selection.anchor.c},focus:{r:rows.length-1,c:ci}};
+      }else selection = {anchor:{r:0,c:ci},focus:{r:rows.length-1,c:ci}};
       updateSelectionStyles(); updateSelectionInfo();
     });
     headerTr.appendChild(th);
@@ -172,6 +343,7 @@ function renderGrid(){
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
+  applyEditorColumnWidths();
   updateSelectionStyles();
   updateSelectionInfo();
 }
@@ -216,7 +388,9 @@ function insertRows(at,count=1){
 function insertCols(at,count=1){
   ensureShape();
   at = Math.max(0, Math.min(rows[0].length, at));
+  const inheritedWidth=columnWidths[Math.max(0,Math.min(columnWidths.length-1,at-1))]??DEFAULT_COLUMN_WIDTH;
   rows.forEach(r=>r.splice(at,0,...Array.from({length:count},()=>"")));
+  columnWidths.splice(at,0,...Array.from({length:count},()=>inheritedWidth));
   merges = merges.map(m=>{
     const end = m.c + m.colspan;
     if (at <= m.c) return {...m,c:m.c+count};
@@ -258,6 +432,7 @@ function deleteCols(c1,c2){
   if (count>=rows[0].length) return setStatus("至少保留 1 欄。",true);
   const saved = merges.map(m=>({m:{...m},value:rows[m.r]?.[m.c]??""}));
   rows.forEach(r=>r.splice(c1,count));
+  columnWidths.splice(c1,count);
   const next=[];
   saved.forEach(({m,value})=>{
     const start=m.c,end=m.c+m.colspan-1;
@@ -309,9 +484,19 @@ function buildHtml(){
   const align = ["left","right","center"].includes(styleSettings.textAlign) ? styleSettings.textAlign : "center";
   const tableWidth = clampWidth(styleSettings.tableWidth);
   const firstHeader = $("firstHeader").checked;
+  const widthTotal=columnWidths.reduce((sum,width)=>sum+width,0)||1;
+  let remainingWidth=tableWidth;
+  const scaledWidths=columnWidths.map((width,index)=>{
+    const columnsAfter=columnWidths.length-index-1;
+    if (!columnsAfter) return Math.max(1,remainingWidth);
+    const scaled=Math.max(1,Math.min(remainingWidth-columnsAfter,Math.round(tableWidth*width/widthTotal)));
+    remainingWidth-=scaled;
+    return scaled;
+  });
 
   // 精簡輸出：共用樣式只寫一次，降低 65,536 Byte 壓力。
   let html = `<table border=1 cellspacing=0 cellpadding=${pad} width=${tableWidth} bordercolor=${bc} bgcolor=${bbg} style="width:${tableWidth}px;max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed;text-align:${align};color:${btx};font:${size}px ${compactFontFamily()}">`;
+  html += `<colgroup>${scaledWidths.map(width=>`<col width=${width}>`).join("")}</colgroup>`;
   for (let ri=0; ri<rows.length; ri++){
     const headerRow = firstHeader && ri === 0;
     html += headerRow ? `<tr bgcolor=${hbg} style="color:${htx};font-weight:700">` : `<tr>`;
@@ -366,9 +551,10 @@ function renderPreview(){
 
 function currentState(){
   return {
-    schemaVersion:11,
+    schemaVersion:12,
     rows,
     merges,
+    columnWidths,
     firstHeader:$("firstHeader").checked,
     styleSettings
   };
@@ -423,6 +609,7 @@ function loadState(){
   if (state?.rows?.length){
     rows = state.rows;
     merges = state.merges || [];
+    columnWidths = state.columnWidths?.length ? state.columnWidths : autoColumnWidths(rows);
     styleSettings = {...DEFAULT_STYLE,...(state.styleSettings||{})};
     $("firstHeader").checked = state.firstHeader !== false;
   }
@@ -516,6 +703,7 @@ function applyMatrix(matrix,source="貼上資料",sourceMerges=[]){
   const clipped=matrix.slice(0,maxRows).map(r=>r.slice(0,maxCols));
   const width=Math.max(1,...clipped.map(r=>r.length));
   rows=clipped.map(r=>Array.from({length:width},(_,i)=>String(r[i]??"")));
+  columnWidths=autoColumnWidths(rows);
   merges=(sourceMerges||[]).filter(m=>m.r<rows.length&&m.c<width&&m.r+m.rowspan<=rows.length&&m.c+m.colspan<=width);
   selection=null;
   renderGrid();renderPreview();saveState();
@@ -606,7 +794,7 @@ $("applyPaste").addEventListener("click",()=>applyMatrix(pendingMatrix?.length?p
 $("createBlank").addEventListener("click",()=>{
   const r=Math.max(1,Math.min(100,Number($("blankRows").value)||1));
   const c=Math.max(1,Math.min(30,Number($("blankCols").value)||1));
-  rows=blankMatrix(r,c);merges=[];selection=null;renderGrid();renderPreview();saveState();setStatus(`已建立 ${r} 列 × ${c} 欄空白表格`);
+  rows=blankMatrix(r,c);columnWidths=Array(c).fill(DEFAULT_COLUMN_WIDTH);merges=[];selection=null;renderGrid();renderPreview();saveState();setStatus(`已建立 ${r} 列 × ${c} 欄空白表格`);
 });
 
 $("addRowAbove").addEventListener("click",()=>{
@@ -633,14 +821,25 @@ $("delCol").addEventListener("click",()=>{
 });
 $("merge").addEventListener("click",mergeSelection);
 $("unmerge").addEventListener("click",unmergeSelection);
-$("clearTable").addEventListener("click",()=>{rows=blankMatrix(4,4);merges=[];selection=null;$("bulkPaste").value="";updatePasteInfo([]);renderGrid();renderPreview();saveState();setStatus("已清空並建立 4 × 4 空白表格");});
+$("clearTable").addEventListener("click",()=>{rows=blankMatrix(4,4);columnWidths=Array(4).fill(DEFAULT_COLUMN_WIDTH);merges=[];selection=null;$("bulkPaste").value="";updatePasteInfo([]);renderGrid();renderPreview();saveState();setStatus("已清空並建立 4 × 4 空白表格");});
+
+$("selectedColWidth").addEventListener("input",event=>{
+  const width=Number(event.target.value);
+  if (width>=MIN_COLUMN_WIDTH&&width<=MAX_COLUMN_WIDTH) applyWidthToSelected(width);
+});
+$("selectedColWidth").addEventListener("change",event=>{
+  if (event.target.value!=="") applyWidthToSelected(event.target.value);
+});
+$("colWidthDecrease").addEventListener("click",()=>stepSelectedWidths(-10));
+$("colWidthIncrease").addEventListener("click",()=>stepSelectedWidths(10));
+$("fitSelectedCols").addEventListener("click",fitSelectedColumns);
+$("equalizeCols").addEventListener("click",equalizeColumns);
 
 $("firstHeader").addEventListener("change",()=>{renderPreview();saveState();});
 ["tableWidth","headerBg","headerText","bodyBg","bodyText","borderColor","fontSize","textAlign","cellPadding"].forEach(id=>$(id).addEventListener("input",()=>{pullStyle();renderPreview();saveState();}));
 document.querySelectorAll(".width-preset").forEach(btn=>btn.addEventListener("click",()=>{
   $("tableWidth").value=btn.dataset.width; pullStyle(); renderPreview(); saveState(); setStatus(`表格寬度已設為 ${btn.dataset.width}px`);
 }));
-$("refresh").addEventListener("click",()=>{renderPreview();saveState();setStatus("預覽已更新");});
 $("copyRich").addEventListener("click",copyRich);
 
 loadState();
