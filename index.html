@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="貼上 Excel、Google 試算表或網頁表格，快速調整、合併、預覽並複製成舊式後台可用的精簡 HTML 表格。">
+  <meta name="theme-color" content="#0b1220">
+  <title>後台表格優化工具</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="brand-block">
+      <span class="eyebrow">TABLE TOOLKIT</span>
+      <h1>後台表格優化工具</h1>
+      <p>把試算表整理成舊式後台也能穩定貼上的精簡表格</p>
+    </div>
+    <div class="header-actions">
+      <span class="privacy-note">資料只保存在這台裝置</span>
+      <span class="badge">Web v1.1</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel paste-panel">
+      <div class="section-head">
+        <div>
+          <h2>1. 貼上表格</h2>
+          <p>支援 Excel、Google 試算表、Numbers、一般網頁表格；會盡量保留合併儲存格與格內換行，內容會自動儲存在此瀏覽器。</p>
+        </div>
+      </div>
+      <textarea id="bulkPaste" rows="5" placeholder="直接 Ctrl+V 貼上整段表格資料…"></textarea>
+      <div class="paste-actions">
+        <span id="pasteInfo" class="hint">尚未偵測到表格資料</span>
+        <button id="applyPaste" type="button" class="secondary">套用貼上資料</button>
+      </div>
+      <details class="blank-maker">
+        <summary>沒有試算表？建立空白表格</summary>
+        <div class="blank-controls">
+          <label>列數<input id="blankRows" type="number" min="1" max="100" value="4"></label>
+          <label>欄數<input id="blankCols" type="number" min="1" max="30" value="4"></label>
+          <button id="createBlank" type="button" class="secondary">建立空白表格</button>
+        </div>
+      </details>
+    </section>
+
+    <section class="panel style-panel">
+      <div class="section-head">
+        <div>
+          <h2>2. 外觀設定</h2>
+          <p>表格寬度可自訂，最高 1000px；樣式採全表共用，盡量節省後台 Byte。</p>
+        </div>
+        <label class="check-label"><input id="firstHeader" type="checkbox" checked> 第一列為表頭</label>
+      </div>
+
+      <div class="style-grid">
+        <label>表格寬度 (px)
+          <input type="number" id="tableWidth" min="200" max="1000" step="50" value="1000">
+        </label>
+        <label>表頭底色<input type="color" id="headerBg" value="#EAF4FF"></label>
+        <label>表頭文字<input type="color" id="headerText" value="#168CFF"></label>
+        <label>內容底色<input type="color" id="bodyBg" value="#FFFFFF"></label>
+        <label>內容文字<input type="color" id="bodyText" value="#111111"></label>
+        <label>框線顏色<input type="color" id="borderColor" value="#222222"></label>
+        <label>字體大小<input type="number" id="fontSize" min="10" max="24" value="14"></label>
+        <label>文字對齊
+          <select id="textAlign">
+            <option value="center">置中</option>
+            <option value="left">靠左</option>
+            <option value="right">靠右</option>
+          </select>
+        </label>
+        <label>Cell padding<input type="number" id="cellPadding" min="0" max="20" value="4"></label>
+      </div>
+      <div class="width-presets" aria-label="表格寬度快速選擇">
+        <span>快速寬度：</span>
+        <button type="button" class="secondary compact width-preset" data-width="600">600</button>
+        <button type="button" class="secondary compact width-preset" data-width="800">800</button>
+        <button type="button" class="secondary compact width-preset" data-width="900">900</button>
+        <button type="button" class="secondary compact width-preset" data-width="1000">1000</button>
+      </div>
+    </section>
+
+    <section class="panel editor-panel">
+      <div class="section-head editor-head">
+        <div>
+          <h2>3. 表格編輯</h2>
+          <p>先點一格；按住 Shift 再點另一格可選範圍。新增／刪除列欄會以目前選取位置為基準。</p>
+        </div>
+        <span id="selectionInfo" class="selection-info">未選取儲存格</span>
+      </div>
+
+      <div class="toolbar grouped-toolbar">
+        <div class="tool-group">
+          <span class="tool-label">列</span>
+          <button id="addRowAbove" type="button" class="secondary">＋ 上方</button>
+          <button id="addRowBelow" type="button" class="secondary">＋ 下方</button>
+          <button id="delRow" type="button" class="secondary">刪除列</button>
+        </div>
+        <div class="tool-group">
+          <span class="tool-label">欄</span>
+          <button id="addColLeft" type="button" class="secondary">＋ 左側</button>
+          <button id="addColRight" type="button" class="secondary">＋ 右側</button>
+          <button id="delCol" type="button" class="secondary">刪除欄</button>
+        </div>
+        <div class="tool-group">
+          <span class="tool-label">合併</span>
+          <button id="merge" type="button" class="secondary merge-btn">合併選取</button>
+          <button id="unmerge" type="button" class="secondary">取消合併</button>
+        </div>
+        <button id="clearTable" type="button" class="danger">清空表格</button>
+      </div>
+
+      <div class="grid-wrap">
+        <table id="editGrid" aria-label="表格編輯區"></table>
+      </div>
+      <p class="hint merge-hint">提示：點第一格 → Shift + 點最後一格 →「合併選取」。如果從試算表複製時原本就有合併，也會盡量直接保留。</p>
+    </section>
+
+    <section class="panel preview-panel">
+      <div class="section-head preview-head">
+        <div>
+          <h2>4. 預覽</h2>
+          <p>預覽會縮放於目前視窗內；實際複製輸出依上方設定寬度，且不超過 1000px。</p>
+        </div>
+        <button id="refresh" type="button" class="secondary compact">重新預覽</button>
+      </div>
+
+      <div class="byte-box">
+        <div class="byte-row">
+          <strong>後台容量估算</strong>
+          <span id="byteText">0 / 65,536 Byte</span>
+        </div>
+        <div class="meter"><span id="byteBar"></span></div>
+        <p id="byteHint" class="hint">採 UTF-8 計算；實際貼入後可能因後台編輯器清理而略有差異。</p>
+      </div>
+
+      <div id="preview" class="preview"></div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-status">
+      <span class="status-dot" aria-hidden="true"></span>
+      <div id="status" aria-live="polite">準備完成</div>
+    </div>
+    <button id="copyRich" type="button" class="copy-outline">複製表格到剪貼簿</button>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+
