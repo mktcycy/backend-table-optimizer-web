@@ -3,139 +3,197 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="貼上 Excel、Google 試算表或網頁表格，快速調整、合併、預覽並複製成舊式後台可用的精簡 HTML 表格。">
-  <meta name="theme-color" content="#0b1220">
+  <meta name="description" content="貼上 Excel、Google 試算表或網頁表格，快速調整欄寬、合併、預覽並複製成舊式後台可用的精簡 HTML 表格。">
+  <meta name="theme-color" content="#ffffff">
   <title>後台表格優化工具</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <header>
-    <div class="brand-block">
-      <span class="eyebrow">TABLE TOOLKIT</span>
-      <h1>後台表格優化工具</h1>
-      <p>把試算表整理成舊式後台也能穩定貼上的精簡表格</p>
-    </div>
-    <div class="header-actions">
-      <span class="privacy-note">資料只保存在這台裝置</span>
-      <span class="badge">Web v1.1</span>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand-block">
+        <span class="brand-mark" aria-hidden="true">表</span>
+        <div>
+          <span class="eyebrow">TABLE TOOLKIT</span>
+          <h1>後台表格優化工具</h1>
+          <p>貼上、整理、複製，三步完成後台表格</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="privacy-note"><span class="privacy-dot" aria-hidden="true"></span>資料只存在這台裝置</span>
+        <span class="badge">Web v1.2</span>
+        <a class="header-link" href="#output">查看預覽</a>
+      </div>
     </div>
   </header>
 
-  <main>
-    <section class="panel paste-panel">
-      <div class="section-head">
-        <div>
-          <h2>1. 貼上表格</h2>
-          <p>支援 Excel、Google 試算表、Numbers、一般網頁表格；會盡量保留合併儲存格與格內換行，內容會自動儲存在此瀏覽器。</p>
-        </div>
-      </div>
-      <textarea id="bulkPaste" rows="5" placeholder="直接 Ctrl+V 貼上整段表格資料…"></textarea>
-      <div class="paste-actions">
-        <span id="pasteInfo" class="hint">尚未偵測到表格資料</span>
-        <button id="applyPaste" type="button" class="secondary">套用貼上資料</button>
-      </div>
-      <details class="blank-maker">
-        <summary>沒有試算表？建立空白表格</summary>
-        <div class="blank-controls">
-          <label>列數<input id="blankRows" type="number" min="1" max="100" value="4"></label>
-          <label>欄數<input id="blankCols" type="number" min="1" max="30" value="4"></label>
-          <button id="createBlank" type="button" class="secondary">建立空白表格</button>
-        </div>
-      </details>
-    </section>
+  <nav class="workflow-nav" aria-label="操作流程">
+    <a href="#import"><span>1</span><strong>匯入資料</strong><small>貼上或建立空白表格</small></a>
+    <a href="#editor"><span>2</span><strong>編輯表格</strong><small>調整內容、結構與欄寬</small></a>
+    <a href="#output"><span>3</span><strong>預覽與複製</strong><small>設定外觀並複製</small></a>
+  </nav>
 
-    <section class="panel style-panel">
+  <main class="app-shell">
+    <section id="import" class="panel workflow-panel paste-panel">
       <div class="section-head">
-        <div>
-          <h2>2. 外觀設定</h2>
-          <p>表格寬度可自訂，最高 1000px；樣式採全表共用，盡量節省後台 Byte。</p>
+        <div class="section-title">
+          <span class="step-number">1</span>
+          <div>
+            <h2>匯入表格</h2>
+            <p>直接貼上 Excel、Google 試算表、Numbers 或網頁表格；合併儲存格與格內換行會盡量保留。</p>
+          </div>
         </div>
-        <label class="check-label"><input id="firstHeader" type="checkbox" checked> 第一列為表頭</label>
+        <span id="pasteInfo" class="info-chip">尚未偵測到表格資料</span>
       </div>
 
-      <div class="style-grid">
-        <label>表格寬度 (px)
-          <input type="number" id="tableWidth" min="200" max="1000" step="50" value="1000">
-        </label>
-        <label>表頭底色<input type="color" id="headerBg" value="#EAF4FF"></label>
-        <label>表頭文字<input type="color" id="headerText" value="#168CFF"></label>
-        <label>內容底色<input type="color" id="bodyBg" value="#FFFFFF"></label>
-        <label>內容文字<input type="color" id="bodyText" value="#111111"></label>
-        <label>框線顏色<input type="color" id="borderColor" value="#222222"></label>
-        <label>字體大小<input type="number" id="fontSize" min="10" max="24" value="14"></label>
-        <label>文字對齊
-          <select id="textAlign">
-            <option value="center">置中</option>
-            <option value="left">靠左</option>
-            <option value="right">靠右</option>
-          </select>
-        </label>
-        <label>Cell padding<input type="number" id="cellPadding" min="0" max="20" value="4"></label>
-      </div>
-      <div class="width-presets" aria-label="表格寬度快速選擇">
-        <span>快速寬度：</span>
-        <button type="button" class="secondary compact width-preset" data-width="600">600</button>
-        <button type="button" class="secondary compact width-preset" data-width="800">800</button>
-        <button type="button" class="secondary compact width-preset" data-width="900">900</button>
-        <button type="button" class="secondary compact width-preset" data-width="1000">1000</button>
+      <div class="import-grid">
+        <div class="paste-workspace">
+          <label class="field-label" for="bulkPaste">表格資料</label>
+          <textarea id="bulkPaste" rows="6" placeholder="在這裡按 Ctrl+V 貼上整段表格…"></textarea>
+          <div class="paste-actions">
+            <span class="hint">貼上後會立即套用，也可以修改文字後再按右側按鈕。</span>
+            <button id="applyPaste" type="button" class="primary-soft">套用內容</button>
+          </div>
+        </div>
+
+        <aside class="import-side" aria-label="匯入說明">
+          <div class="tip-card">
+            <span class="tip-icon" aria-hidden="true">⌘</span>
+            <div><strong>最快方式</strong><p>在試算表全選需要的範圍，複製後直接貼到左側。</p></div>
+          </div>
+          <details class="blank-maker">
+            <summary>建立空白表格</summary>
+            <div class="blank-controls">
+              <label>列數<input id="blankRows" type="number" min="1" max="100" value="4"></label>
+              <label>欄數<input id="blankCols" type="number" min="1" max="30" value="4"></label>
+              <button id="createBlank" type="button" class="secondary">建立</button>
+            </div>
+          </details>
+        </aside>
       </div>
     </section>
 
-    <section class="panel editor-panel">
+    <section id="editor" class="panel workflow-panel editor-panel">
       <div class="section-head editor-head">
-        <div>
-          <h2>3. 表格編輯</h2>
-          <p>先點一格；按住 Shift 再點另一格可選範圍。新增／刪除列欄會以目前選取位置為基準。</p>
+        <div class="section-title">
+          <span class="step-number">2</span>
+          <div>
+            <h2>編輯表格</h2>
+            <p>點一下選取儲存格；按住 Shift 再點另一格可選範圍。新增與刪除會依目前選取位置執行。</p>
+          </div>
         </div>
         <span id="selectionInfo" class="selection-info">未選取儲存格</span>
       </div>
 
-      <div class="toolbar grouped-toolbar">
-        <div class="tool-group">
-          <span class="tool-label">列</span>
-          <button id="addRowAbove" type="button" class="secondary">＋ 上方</button>
-          <button id="addRowBelow" type="button" class="secondary">＋ 下方</button>
-          <button id="delRow" type="button" class="secondary">刪除列</button>
+      <div class="editor-controls">
+        <div class="action-bar" role="toolbar" aria-label="表格編輯工具">
+          <div class="tool-group">
+            <span class="tool-label">列</span>
+            <button id="addRowAbove" type="button" class="secondary">＋ 上方</button>
+            <button id="addRowBelow" type="button" class="secondary">＋ 下方</button>
+            <button id="delRow" type="button" class="secondary">刪除</button>
+          </div>
+          <div class="tool-group">
+            <span class="tool-label">欄</span>
+            <button id="addColLeft" type="button" class="secondary">＋ 左側</button>
+            <button id="addColRight" type="button" class="secondary">＋ 右側</button>
+            <button id="delCol" type="button" class="secondary">刪除</button>
+          </div>
+          <div class="tool-group">
+            <span class="tool-label">儲存格</span>
+            <button id="merge" type="button" class="secondary merge-btn">合併選取</button>
+            <button id="unmerge" type="button" class="secondary">取消合併</button>
+          </div>
+          <button id="clearTable" type="button" class="danger">清空表格</button>
         </div>
-        <div class="tool-group">
-          <span class="tool-label">欄</span>
-          <button id="addColLeft" type="button" class="secondary">＋ 左側</button>
-          <button id="addColRight" type="button" class="secondary">＋ 右側</button>
-          <button id="delCol" type="button" class="secondary">刪除欄</button>
+
+        <div class="column-width-panel">
+          <div class="column-width-copy">
+            <span class="resize-symbol" aria-hidden="true">↔</span>
+            <div><strong>欄寬調整</strong><p id="columnWidthHint">先選一格或點欄標題，也可直接拖曳欄標題右側把手。</p></div>
+          </div>
+          <div class="column-width-actions">
+            <button id="colWidthDecrease" type="button" class="icon-button" aria-label="縮小選取欄寬">−</button>
+            <label class="width-input"><input id="selectedColWidth" type="number" min="80" max="520" step="10" placeholder="欄寬" aria-label="選取欄寬"><span>px</span></label>
+            <button id="colWidthIncrease" type="button" class="icon-button" aria-label="放大選取欄寬">＋</button>
+            <button id="fitSelectedCols" type="button" class="secondary">依內容適寬</button>
+            <button id="equalizeCols" type="button" class="secondary">平均分配</button>
+          </div>
         </div>
-        <div class="tool-group">
-          <span class="tool-label">合併</span>
-          <button id="merge" type="button" class="secondary merge-btn">合併選取</button>
-          <button id="unmerge" type="button" class="secondary">取消合併</button>
-        </div>
-        <button id="clearTable" type="button" class="danger">清空表格</button>
       </div>
 
       <div class="grid-wrap">
         <table id="editGrid" aria-label="表格編輯區"></table>
       </div>
-      <p class="hint merge-hint">提示：點第一格 → Shift + 點最後一格 →「合併選取」。如果從試算表複製時原本就有合併，也會盡量直接保留。</p>
+      <p class="hint editor-hint">欄寬比例會保留在複製結果中。若要合併：點第一格 → Shift + 點最後一格 →「合併選取」。</p>
     </section>
 
-    <section class="panel preview-panel">
-      <div class="section-head preview-head">
-        <div>
-          <h2>4. 預覽</h2>
-          <p>預覽會縮放於目前視窗內；實際複製輸出依上方設定寬度，且不超過 1000px。</p>
+    <section id="output" class="panel workflow-panel output-panel">
+      <div class="section-head">
+        <div class="section-title">
+          <span class="step-number">3</span>
+          <div>
+            <h2>預覽與複製</h2>
+            <p>常用設定直接顯示，顏色與間距收在進階選項；所有變更都會即時更新預覽。</p>
+          </div>
         </div>
-        <button id="refresh" type="button" class="secondary compact">重新預覽</button>
       </div>
 
-      <div class="byte-box">
-        <div class="byte-row">
-          <strong>後台容量估算</strong>
-          <span id="byteText">0 / 65,536 Byte</span>
-        </div>
-        <div class="meter"><span id="byteBar"></span></div>
-        <p id="byteHint" class="hint">採 UTF-8 計算；實際貼入後可能因後台編輯器清理而略有差異。</p>
-      </div>
+      <div class="output-grid">
+        <div class="appearance-card">
+          <div class="card-head"><div><h3>外觀設定</h3><p>控制複製到後台的實際樣式</p></div><span class="live-chip">即時更新</span></div>
 
-      <div id="preview" class="preview"></div>
+          <div class="basic-style-grid">
+            <label>表格總寬度
+              <span class="unit-input"><input type="number" id="tableWidth" min="200" max="1000" step="50" value="1000"><span>px</span></span>
+            </label>
+            <label>字體大小
+              <span class="unit-input"><input type="number" id="fontSize" min="10" max="24" value="14"><span>px</span></span>
+            </label>
+            <label>文字對齊
+              <select id="textAlign">
+                <option value="center">置中</option>
+                <option value="left">靠左</option>
+                <option value="right">靠右</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="switch-row"><span><strong>第一列為表頭</strong><small>套用表頭底色與粗體</small></span><input id="firstHeader" type="checkbox" checked></label>
+
+          <div class="width-presets" aria-label="表格總寬度快速選擇">
+            <span>快速寬度</span>
+            <button type="button" class="secondary compact width-preset" data-width="600">600</button>
+            <button type="button" class="secondary compact width-preset" data-width="800">800</button>
+            <button type="button" class="secondary compact width-preset" data-width="900">900</button>
+            <button type="button" class="secondary compact width-preset" data-width="1000">1000</button>
+          </div>
+
+          <details class="advanced-style">
+            <summary>顏色與間距</summary>
+            <div class="color-grid">
+              <label>表頭底色<input type="color" id="headerBg" value="#EAF4FF"></label>
+              <label>表頭文字<input type="color" id="headerText" value="#168CFF"></label>
+              <label>內容底色<input type="color" id="bodyBg" value="#FFFFFF"></label>
+              <label>內容文字<input type="color" id="bodyText" value="#111111"></label>
+              <label>框線顏色<input type="color" id="borderColor" value="#222222"></label>
+              <label>格內間距<span class="unit-input"><input type="number" id="cellPadding" min="0" max="20" value="4"><span>px</span></span></label>
+            </div>
+          </details>
+        </div>
+
+        <div class="preview-card">
+          <div class="card-head preview-card-head">
+            <div><h3>輸出預覽</h3><p>實際寬度最高 1000px；寬表格可在預覽區左右捲動。</p></div>
+            <span id="byteText" class="byte-count">0 / 65,536 Byte</span>
+          </div>
+          <div class="byte-box">
+            <div class="meter" aria-hidden="true"><span id="byteBar"></span></div>
+            <p id="byteHint" class="hint">採 UTF-8 計算；實際貼入後可能因後台編輯器清理而略有差異。</p>
+          </div>
+          <div id="preview" class="preview"></div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -144,7 +202,7 @@
       <span class="status-dot" aria-hidden="true"></span>
       <div id="status" aria-live="polite">準備完成</div>
     </div>
-    <button id="copyRich" type="button" class="copy-outline">複製表格到剪貼簿</button>
+    <button id="copyRich" type="button" class="copy-button">複製表格到剪貼簿</button>
   </footer>
 
   <script src="popup.js"></script>
