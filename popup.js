@@ -568,12 +568,13 @@ function buildHtml(){
     remainingWidth-=scaled;
     return scaled;
   });
-  const widthAttr=value=>percentMode?`${formatPercent(value/10)}%`:String(value);
+  // width 屬性使用數字作為舊式編輯器的比例提示；現代瀏覽器則採用下方的 CSS 單位。
+  const widthAttr=value=>String(value);
   const widthCss=value=>percentMode?`${formatPercent(value/10)}%`:`${value}px`;
 
   // 精簡輸出：共用樣式只寫一次，降低 65,536 Byte 壓力。
-  let html = `<table border=1 cellspacing=0 cellpadding=${pad} width="${tableWidthAttr}" bordercolor=${bc} bgcolor=${bbg} style="width:${tableWidthToken};max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed;overflow-wrap:anywhere;word-break:break-all;text-align:${align};color:${btx};font:${size}px ${compactFontFamily()}">`;
-  html += `<colgroup>${scaledWidths.map(width=>`<col width="${widthAttr(width)}" style="width:${widthCss(width)}">`).join("")}</colgroup>`;
+  let html = `<table border=1 cellspacing=0 cellpadding=${pad} width="${tableWidthAttr}" bordercolor=${bc} bgcolor=${bbg} style="width:${tableWidthToken}!important;max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed!important;overflow-wrap:anywhere;word-break:break-all;text-align:${align};color:${btx};font:${size}px ${compactFontFamily()}">`;
+  html += `<colgroup>${scaledWidths.map(width=>`<col width="${widthAttr(width)}" style="width:${widthCss(width)}!important">`).join("")}</colgroup>`;
   for (let ri=0; ri<rows.length; ri++){
     const headerRow = firstHeader && ri === 0;
     html += headerRow ? `<tr bgcolor=${hbg} style="color:${htx};font-weight:700">` : `<tr>`;
@@ -588,7 +589,7 @@ function buildHtml(){
       // 每個可見儲存格都重複寫入寬度；合併格使用涵蓋欄位的合計寬度。
       const span=m?.colspan||1;
       const cellWidth=scaledWidths.slice(ci,ci+span).reduce((sum,width)=>sum+width,0);
-      attrs += ` width="${widthAttr(cellWidth)}" style="width:${widthCss(cellWidth)}"`;
+      attrs += ` width="${widthAttr(cellWidth)}" style="width:${widthCss(cellWidth)}!important"`;
       html += `<${tag}${attrs}>${textWithBreaks(rows[ri][ci])}</${tag}>`;
     }
     html += `</tr>`;
