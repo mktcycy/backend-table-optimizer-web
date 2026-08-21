@@ -4,6 +4,7 @@ const STORAGE_KEY = "backendTableOptimizerWebState";
 const DEFAULT_COLUMN_WIDTH = 150;
 const MIN_COLUMN_WIDTH = 40;
 const MAX_COLUMN_WIDTH = 1200;
+const WIDTH_SPACER_SRC = "https://mktcycy.github.io/backend-table-optimizer-web/spacer.svg";
 
 const DEFAULT_STYLE = {
   tableWidth: 1000,
@@ -568,9 +569,16 @@ function buildHtml(){
     remainingWidth-=scaled;
     return scaled;
   });
+  const spacerWidths=scaledWidths.map(width=>Math.max(1,width-pad*2-2));
   // width 屬性使用數字作為舊式編輯器的比例提示；現代瀏覽器則採用下方的 CSS 單位。
   const widthAttr=value=>String(value);
   const widthCss=value=>percentMode?`${formatPercent(value/10)}%`:`${value}px`;
+  // 尋找沒有跨欄、且不是由上方 rowspan 覆蓋的完整列，放置透明寬度支撐。
+  // BBIN 等舊式編輯器即使刪除 table/td 的寬度，仍會保留圖片本身的尺寸。
+  const sizingRowIndex=rows.findIndex((_,ri)=>rows[0].every((__,ci)=>{
+    const merge=mergeContaining(ri,ci);
+    return !merge||(isTopLeft(merge,ri,ci)&&merge.colspan===1);
+  }));
 
   // 精簡輸出：共用樣式只寫一次，降低 65,536 Byte 壓力。
   let html = `<table border=1 cellspacing=0 cellpadding=${pad} width="${tableWidthAttr}" bordercolor=${bc} bgcolor=${bbg} style="width:${tableWidthToken}!important;max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed!important;overflow-wrap:anywhere;word-break:break-all;text-align:${align};color:${btx};font:${size}px ${compactFontFamily()}">`;
@@ -590,7 +598,10 @@ function buildHtml(){
       const span=m?.colspan||1;
       const cellWidth=scaledWidths.slice(ci,ci+span).reduce((sum,width)=>sum+width,0);
       attrs += ` width="${widthAttr(cellWidth)}" style="width:${widthCss(cellWidth)}!important"`;
-      html += `<${tag}${attrs}>${textWithBreaks(rows[ri][ci])}</${tag}>`;
+      const spacer=ri===sizingRowIndex&&span===1
+        ?`<img src="${WIDTH_SPACER_SRC}" width="${spacerWidths[ci]}" height="1" alt="" style="display:block;width:${spacerWidths[ci]}px!important;min-width:${spacerWidths[ci]}px!important;max-width:${spacerWidths[ci]}px!important;height:1px!important;border:0!important;margin:0;padding:0">`
+        :"";
+      html += `<${tag}${attrs}>${spacer}${textWithBreaks(rows[ri][ci])}</${tag}>`;
     }
     html += `</tr>`;
   }
