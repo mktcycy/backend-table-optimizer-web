@@ -941,13 +941,6 @@ $("tableWidthUnit").addEventListener("change",()=>{
   pullStyle();updateTableWidthUi();renderPreview();saveState();
   setStatus(`表格總寬度已切換為 ${percentMode?"百分比":"像素"}模式`);
 });
-document.querySelectorAll(".width-preset").forEach(btn=>btn.addEventListener("click",()=>{
-  const unit=btn.dataset.unit==="percent"?"percent":"px";
-  $("tableWidthUnit").value=unit;
-  $("tableWidth").value=btn.dataset.width;
-  pullStyle();updateTableWidthUi();renderPreview();saveState();
-  setStatus(`表格寬度已設為 ${btn.dataset.width}${unit==="percent"?"%":"px"}`);
-}));
 $("copyRich").addEventListener("click",copyRich);
 
 loadState();

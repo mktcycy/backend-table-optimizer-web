@@ -6,7 +6,7 @@
   <meta name="description" content="貼上 Excel、Google 試算表或網頁表格，快速調整欄寬、合併、預覽並複製成舊式後台可用的精簡 HTML 表格。">
   <meta name="theme-color" content="#ffffff">
   <title>後台表格優化工具</title>
-  <link rel="stylesheet" href="popup.css?v=1.4">
+  <link rel="stylesheet" href="popup.css?v=1.5">
 </head>
 <body>
   <header class="site-header">
@@ -21,7 +21,7 @@
       </div>
       <div class="header-actions">
         <span class="privacy-note"><span class="privacy-dot" aria-hidden="true"></span>資料只存在這台裝置</span>
-        <span class="badge">Web v1.4</span>
+        <span class="badge">Web v1.5</span>
         <a class="header-link" href="#output">查看預覽</a>
       </div>
     </div>
@@ -161,15 +161,6 @@
 
           <label class="switch-row"><span><strong>第一列為表頭</strong><small>套用表頭底色與粗體</small></span><input id="firstHeader" type="checkbox" checked></label>
 
-          <div class="width-presets" aria-label="表格總寬度快速選擇">
-            <span>快速寬度</span>
-            <button type="button" class="secondary compact width-preset" data-width="600" data-unit="px">600</button>
-            <button type="button" class="secondary compact width-preset" data-width="800" data-unit="px">800</button>
-            <button type="button" class="secondary compact width-preset" data-width="900" data-unit="px">900</button>
-            <button type="button" class="secondary compact width-preset" data-width="1000" data-unit="px">1000</button>
-            <button type="button" class="secondary compact width-preset percent-preset" data-width="100" data-unit="percent">100%</button>
-          </div>
-
           <details class="advanced-style">
             <summary>顏色與間距</summary>
             <div class="color-grid">
@@ -206,7 +197,7 @@
     <button id="copyRich" type="button" class="copy-button">複製表格到剪貼簿</button>
   </footer>
 
-  <script src="popup.js?v=1.4"></script>
+  <script src="popup.js?v=1.5"></script>
 </body>
 </html>
 
