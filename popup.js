@@ -7,8 +7,8 @@ const MAX_COLUMN_WIDTH = 1200;
 const WIDTH_SPACER_SRC = "https://mktcycy.github.io/backend-table-optimizer-web/spacer.svg";
 
 const DEFAULT_STYLE = {
-  tableWidth: 1000,
-  tableWidthUnit: "px",
+  tableWidth: 100,
+  tableWidthUnit: "percent",
   headerBg: "#EAF4FF",
   headerText: "#168CFF",
   bodyBg: "#FFFFFF",
