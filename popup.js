@@ -40,6 +40,17 @@ function esc(v){
   return String(v ?? "").replace(/[&<>\"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
 }
 
+function safeImageUrl(value){
+  const source=String(value??"").trim();
+  if (!source) return "";
+  try{
+    const url=new URL(source);
+    return ["http:","https:"].includes(url.protocol)?url.href:"";
+  }catch(err){
+    return "";
+  }
+}
+
 function breakLongSeparatorRuns(v){
   return String(v ?? "").replace(/[‐‑‒–—―_＿─━═⎯-]{6,}/g, run => run.replace(/(.{4})(?=.)/g, "$1\u200B"));
 }
@@ -403,11 +414,19 @@ function renderGrid(){
       }
       const input = document.createElement("textarea");
       input.value = row[ci] ?? "";
-      input.rows = Math.max(1, Math.min(8, String(input.value).split(/\r?\n/).length));
+      if (isImageGrid()){
+        input.rows=1;
+        input.placeholder="貼上圖片網址（https://…）";
+        input.classList.add("image-url-input");
+        input.setAttribute("aria-label",`第 ${ri*width+ci+1} 張圖片網址`);
+      }else{
+        input.rows = Math.max(1, Math.min(8, String(input.value).split(/\r?\n/).length));
+        input.setAttribute("aria-label",`${colName(ci)}${ri+1} 儲存格內容`);
+      }
       input.addEventListener("mousedown", e => selectCell(ri,ci,!!e.shiftKey));
       input.addEventListener("input", e => {
         rows[ri][ci] = e.target.value;
-        e.target.rows = Math.max(1, Math.min(8, String(e.target.value).split(/\r?\n/).length));
+        if (!isImageGrid()) e.target.rows = Math.max(1, Math.min(8, String(e.target.value).split(/\r?\n/).length));
         renderPreview(); saveState();
       });
       td.addEventListener("click", e => selectCell(ri,ci,!!e.shiftKey));
@@ -625,7 +644,14 @@ function buildHtml(){
       const spacer=!imageMode&&ri===sizingRowIndex&&span===1
         ?`<img src="${WIDTH_SPACER_SRC}" width="${spacerWidths[ci]}" height="1" alt="" style="display:block;width:${spacerWidths[ci]}px!important;min-width:${spacerWidths[ci]}px!important;max-width:${spacerWidths[ci]}px!important;height:1px!important;border:0!important;margin:0;padding:0">`
         :"";
-      html += `<${tag}${attrs}>${spacer}${textWithBreaks(rows[ri][ci])}</${tag}>`;
+      let cellContent=textWithBreaks(rows[ri][ci]);
+      if (imageMode){
+        const imageUrl=safeImageUrl(rows[ri][ci]);
+        cellContent=imageUrl
+          ?`<img src="${esc(imageUrl)}" width="100%" alt="" style="display:block;width:100%!important;max-width:100%;height:auto!important;border:0!important;margin:0!important;padding:0!important">`
+          :`【貼上圖片網址 ${ri*rows[0].length+ci+1}】`;
+      }
+      html += `<${tag}${attrs}>${spacer}${cellContent}</${tag}>`;
     }
     html += `</tr>`;
   }
@@ -665,12 +691,13 @@ function renderPreview(){
   const html = buildHtml();
   $("preview").dataset.layoutMode=layoutMode;
   $("preview").innerHTML = html;
+  if (isImageGrid()) $("preview").querySelectorAll("td").forEach(cell=>cell.classList.toggle("preview-image-cell",!!cell.querySelector("img")));
   updateByteMeter(html);
 }
 
 function currentState(){
   return {
-    schemaVersion:14,
+    schemaVersion:15,
     rows,
     merges,
     columnWidths,
@@ -883,6 +910,10 @@ function fallbackCopy(html,text){
 }
 
 async function copyRich(){
+  if (isImageGrid()){
+    const missing=rows.flat().filter(value=>!safeImageUrl(value)).length;
+    if (missing) return setStatus(`還有 ${missing} 個圖片格尚未填入有效的 http:// 或 https:// 圖片網址。`,true);
+  }
   const html=buildHtml();
   const text=plainText();
   const bytes=updateByteMeter(html);
@@ -939,10 +970,7 @@ $("createBlank").addEventListener("click",()=>{
 $("createImageGrid").addEventListener("click",()=>{
   const rowCount=Math.max(1,Math.min(50,Number($("imageGridRows").value)||1));
   imageGridGap=clampImageGridGap($("imageGridGap").value);
-  rows=Array.from({length:rowCount},(_,ri)=>[
-    `【在此插入圖片 ${ri*2+1}】`,
-    `【在此插入圖片 ${ri*2+2}】`
-  ]);
+  rows=blankMatrix(rowCount,2);
   columnWidths=[DEFAULT_COLUMN_WIDTH,DEFAULT_COLUMN_WIDTH];
   merges=[];
   selection=null;
@@ -950,7 +978,7 @@ $("createImageGrid").addEventListener("click",()=>{
   styleSettings={...styleSettings,tableWidth:100,tableWidthUnit:"percent",textAlign:"center",cellPadding:0};
   $("firstHeader").checked=false;
   applyStyleInputs();updateLayoutModeUi();renderGrid();renderPreview();saveState();
-  setStatus(`已建立 ${rowCount} 列雙欄圖片版型；貼到後台後替換提示文字即可插圖`);
+  setStatus(`已建立 ${rowCount} 列雙欄圖片版型；請在表格格子貼入圖片網址`);
 });
 
 $("addRowAbove").addEventListener("click",()=>{

@@ -6,7 +6,7 @@
   <meta name="description" content="貼上 Excel、Google 試算表或網頁表格，快速調整欄寬、合併、預覽並複製成舊式後台可用的精簡 HTML 表格。">
   <meta name="theme-color" content="#ffffff">
   <title>後台表格優化工具</title>
-  <link rel="stylesheet" href="popup.css?v=1.9">
+  <link rel="stylesheet" href="popup.css?v=1.10">
 </head>
 <body>
   <header class="site-header">
@@ -21,7 +21,7 @@
       </div>
       <div class="header-actions">
         <span class="privacy-note"><span class="privacy-dot" aria-hidden="true"></span>資料只存在這台裝置</span>
-        <span class="badge">Web v1.9</span>
+        <span class="badge">Web v1.10</span>
         <a class="header-link" href="#output">查看預覽</a>
       </div>
     </div>
@@ -72,7 +72,7 @@
           <div class="image-layout-maker">
             <div class="image-layout-head">
               <span class="image-layout-icon" aria-hidden="true">▦</span>
-              <div><strong>雙欄圖片版型</strong><p>左右各 50%，貼到後台後替換提示文字即可插圖。</p></div>
+              <div><strong>雙欄圖片版型</strong><p>建立後在表格格子貼入圖片網址，圖片會自動填滿欄寬。</p></div>
             </div>
             <div class="image-layout-controls">
               <label>列數（每列 2 張）<input id="imageGridRows" type="number" min="1" max="50" value="4"></label>
@@ -173,7 +173,7 @@
           <label class="switch-row"><span><strong>第一列為表頭</strong><small>套用表頭底色與粗體</small></span><input id="firstHeader" type="checkbox" checked></label>
 
           <div id="imageGridStyle" class="image-grid-style" hidden>
-            <span><strong>雙欄圖片模式</strong><small>選取後台中的提示文字，再使用後台的插入圖片功能。</small></span>
+            <span><strong>雙欄圖片模式</strong><small>在上方編輯表格貼入圖片網址；輸出圖片寬度固定為 100%。</small></span>
             <label>間距<span class="unit-input"><input id="activeImageGridGap" type="number" min="0" max="20" step="1" value="4"><span>px</span></span></label>
           </div>
 
@@ -213,7 +213,7 @@
     <button id="copyRich" type="button" class="copy-button">複製表格到剪貼簿</button>
   </footer>
 
-  <script src="popup.js?v=1.9"></script>
+  <script src="popup.js?v=1.10"></script>
 </body>
 </html>
 
