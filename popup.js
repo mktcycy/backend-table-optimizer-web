@@ -27,6 +27,8 @@ let pendingMerges = [];
 let styleSettings = {...DEFAULT_STYLE};
 let columnWidths = Array(4).fill(DEFAULT_COLUMN_WIDTH);
 let storageAvailable = true;
+let layoutMode = "table";
+let imageGridGap = 4;
 
 const $ = id => document.getElementById(id);
 
@@ -544,21 +546,39 @@ function compactFontFamily(){
   return 'Arial,Microsoft JhengHei,sans-serif';
 }
 
+function clampImageGridGap(value){
+  return Math.max(0,Math.min(20,Math.round(Number(value)||0)));
+}
+
+function isImageGrid(){
+  return layoutMode === "image-grid";
+}
+
+function updateLayoutModeUi(){
+  const imageMode=isImageGrid();
+  const headerToggle=$("firstHeader");
+  headerToggle.disabled=imageMode;
+  headerToggle.closest(".switch-row")?.classList.toggle("is-disabled",imageMode);
+  $("imageGridStyle").hidden=!imageMode;
+  $("activeImageGridGap").value=String(imageGridGap);
+}
+
 function buildHtml(){
   ensureShape();
+  const imageMode=isImageGrid();
   const hbg = normalizeHex(styleSettings.headerBg, DEFAULT_STYLE.headerBg);
   const htx = normalizeHex(styleSettings.headerText, DEFAULT_STYLE.headerText);
   const bbg = normalizeHex(styleSettings.bodyBg, DEFAULT_STYLE.bodyBg);
   const btx = normalizeHex(styleSettings.bodyText, DEFAULT_STYLE.bodyText);
   const bc = normalizeHex(styleSettings.borderColor, DEFAULT_STYLE.borderColor);
   const size = Math.max(10,Math.min(24,Number(styleSettings.fontSize)||14));
-  const pad = Math.max(0,Math.min(20,Number(styleSettings.cellPadding)||4));
+  const pad = imageMode?0:Math.max(0,Math.min(20,Number(styleSettings.cellPadding)||4));
   const align = ["left","right","center"].includes(styleSettings.textAlign) ? styleSettings.textAlign : "center";
   const percentMode=styleSettings.tableWidthUnit==="percent";
   const tableWidth=percentMode?clampPercentWidth(styleSettings.tableWidth):clampWidth(styleSettings.tableWidth);
   const tableWidthToken=`${formatPercent(tableWidth)}${percentMode?"%":"px"}`;
   const tableWidthAttr=percentMode?`${formatPercent(tableWidth)}%`:String(tableWidth);
-  const firstHeader = $("firstHeader").checked;
+  const firstHeader = !imageMode && $("firstHeader").checked;
   const widthTotal=columnWidths.reduce((sum,width)=>sum+width,0)||1;
   const scaleTotal=percentMode?1000:tableWidth;
   let remainingWidth=scaleTotal;
@@ -581,7 +601,10 @@ function buildHtml(){
   }));
 
   // 精簡輸出：共用樣式只寫一次，降低 65,536 Byte 壓力。
-  let html = `<table border=1 cellspacing=0 cellpadding=${pad} width="${tableWidthAttr}" bordercolor=${bc} bgcolor=${bbg} style="width:${tableWidthToken}!important;max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed!important;overflow-wrap:anywhere;word-break:break-all;text-align:${align};color:${btx};font:${size}px ${compactFontFamily()}">`;
+  const tableAttrs=imageMode
+    ?`border=0 cellspacing=${imageGridGap} cellpadding=0 width="${tableWidthAttr}" style="width:${tableWidthToken}!important;max-width:100%;margin:auto;border-collapse:separate;table-layout:fixed!important;text-align:center;color:${btx};font:${size}px ${compactFontFamily()}"`
+    :`border=1 cellspacing=0 cellpadding=${pad} width="${tableWidthAttr}" bordercolor=${bc} bgcolor=${bbg} style="width:${tableWidthToken}!important;max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed!important;overflow-wrap:anywhere;word-break:break-all;text-align:${align};color:${btx};font:${size}px ${compactFontFamily()}"`;
+  let html = `<table ${tableAttrs}>`;
   html += `<colgroup>${scaledWidths.map(width=>`<col width="${widthAttr(width)}" style="width:${widthCss(width)}!important">`).join("")}</colgroup>`;
   for (let ri=0; ri<rows.length; ri++){
     const headerRow = firstHeader && ri === 0;
@@ -597,8 +620,9 @@ function buildHtml(){
       // 每個可見儲存格都重複寫入寬度；合併格使用涵蓋欄位的合計寬度。
       const span=m?.colspan||1;
       const cellWidth=scaledWidths.slice(ci,ci+span).reduce((sum,width)=>sum+width,0);
-      attrs += ` width="${widthAttr(cellWidth)}" style="width:${widthCss(cellWidth)}!important"`;
-      const spacer=ri===sizingRowIndex&&span===1
+      const cellStyle=imageMode?`width:${widthCss(cellWidth)}!important;vertical-align:top;padding:0`:`width:${widthCss(cellWidth)}!important`;
+      attrs += ` width="${widthAttr(cellWidth)}" style="${cellStyle}"`;
+      const spacer=!imageMode&&ri===sizingRowIndex&&span===1
         ?`<img src="${WIDTH_SPACER_SRC}" width="${spacerWidths[ci]}" height="1" alt="" style="display:block;width:${spacerWidths[ci]}px!important;min-width:${spacerWidths[ci]}px!important;max-width:${spacerWidths[ci]}px!important;height:1px!important;border:0!important;margin:0;padding:0">`
         :"";
       html += `<${tag}${attrs}>${spacer}${textWithBreaks(rows[ri][ci])}</${tag}>`;
@@ -639,18 +663,21 @@ function updateByteMeter(html){
 
 function renderPreview(){
   const html = buildHtml();
+  $("preview").dataset.layoutMode=layoutMode;
   $("preview").innerHTML = html;
   updateByteMeter(html);
 }
 
 function currentState(){
   return {
-    schemaVersion:13,
+    schemaVersion:14,
     rows,
     merges,
     columnWidths,
     firstHeader:$("firstHeader").checked,
-    styleSettings
+    styleSettings,
+    layoutMode,
+    imageGridGap
   };
 }
 
@@ -720,9 +747,11 @@ function loadState(){
     merges = state.merges || [];
     columnWidths = state.columnWidths?.length ? state.columnWidths : autoColumnWidths(rows);
     styleSettings = {...DEFAULT_STYLE,...(state.styleSettings||{})};
+    layoutMode = state.layoutMode === "image-grid" ? "image-grid" : "table";
+    imageGridGap = clampImageGridGap(state.imageGridGap ?? 4);
     $("firstHeader").checked = state.firstHeader !== false;
   }
-  ensureShape(); applyStyleInputs(); renderGrid(); renderPreview(); saveState();
+  ensureShape(); applyStyleInputs(); updateLayoutModeUi(); renderGrid(); renderPreview(); saveState();
 }
 
 function setStatus(msg,error=false){
@@ -812,10 +841,11 @@ function applyMatrix(matrix,source="貼上資料",sourceMerges=[]){
   const clipped=matrix.slice(0,maxRows).map(r=>r.slice(0,maxCols));
   const width=Math.max(1,...clipped.map(r=>r.length));
   rows=clipped.map(r=>Array.from({length:width},(_,i)=>String(r[i]??"")));
+  layoutMode="table";
   columnWidths=autoColumnWidths(rows);
   merges=(sourceMerges||[]).filter(m=>m.r<rows.length&&m.c<width&&m.r+m.rowspan<=rows.length&&m.c+m.colspan<=width);
   selection=null;
-  renderGrid();renderPreview();saveState();
+  updateLayoutModeUi();renderGrid();renderPreview();saveState();
   const mergeNote=merges.length?`，保留 ${merges.length} 個合併區塊`:"";
   setStatus(`${source}：${rows.length} 列 × ${width} 欄${mergeNote}`);
 }
@@ -903,7 +933,24 @@ $("applyPaste").addEventListener("click",()=>applyMatrix(pendingMatrix?.length?p
 $("createBlank").addEventListener("click",()=>{
   const r=Math.max(1,Math.min(100,Number($("blankRows").value)||1));
   const c=Math.max(1,Math.min(30,Number($("blankCols").value)||1));
-  rows=blankMatrix(r,c);columnWidths=Array(c).fill(DEFAULT_COLUMN_WIDTH);merges=[];selection=null;renderGrid();renderPreview();saveState();setStatus(`已建立 ${r} 列 × ${c} 欄空白表格`);
+  rows=blankMatrix(r,c);columnWidths=Array(c).fill(DEFAULT_COLUMN_WIDTH);merges=[];selection=null;layoutMode="table";updateLayoutModeUi();renderGrid();renderPreview();saveState();setStatus(`已建立 ${r} 列 × ${c} 欄空白表格`);
+});
+
+$("createImageGrid").addEventListener("click",()=>{
+  const rowCount=Math.max(1,Math.min(50,Number($("imageGridRows").value)||1));
+  imageGridGap=clampImageGridGap($("imageGridGap").value);
+  rows=Array.from({length:rowCount},(_,ri)=>[
+    `【在此插入圖片 ${ri*2+1}】`,
+    `【在此插入圖片 ${ri*2+2}】`
+  ]);
+  columnWidths=[DEFAULT_COLUMN_WIDTH,DEFAULT_COLUMN_WIDTH];
+  merges=[];
+  selection=null;
+  layoutMode="image-grid";
+  styleSettings={...styleSettings,tableWidth:100,tableWidthUnit:"percent",textAlign:"center",cellPadding:0};
+  $("firstHeader").checked=false;
+  applyStyleInputs();updateLayoutModeUi();renderGrid();renderPreview();saveState();
+  setStatus(`已建立 ${rowCount} 列雙欄圖片版型；貼到後台後替換提示文字即可插圖`);
 });
 
 $("addRowAbove").addEventListener("click",()=>{
@@ -930,7 +977,7 @@ $("delCol").addEventListener("click",()=>{
 });
 $("merge").addEventListener("click",mergeSelection);
 $("unmerge").addEventListener("click",unmergeSelection);
-$("clearTable").addEventListener("click",()=>{rows=blankMatrix(4,4);columnWidths=Array(4).fill(DEFAULT_COLUMN_WIDTH);merges=[];selection=null;$("bulkPaste").value="";updatePasteInfo([]);renderGrid();renderPreview();saveState();setStatus("已清空並建立 4 × 4 空白表格");});
+$("clearTable").addEventListener("click",()=>{rows=blankMatrix(4,4);columnWidths=Array(4).fill(DEFAULT_COLUMN_WIDTH);merges=[];selection=null;layoutMode="table";$("bulkPaste").value="";updatePasteInfo([]);updateLayoutModeUi();renderGrid();renderPreview();saveState();setStatus("已清空並建立 4 × 4 空白表格");});
 
 $("selectedColWidth").addEventListener("input",event=>{
   const percent=Number(event.target.value);
@@ -945,6 +992,10 @@ $("fitSelectedCols").addEventListener("click",fitSelectedColumns);
 $("equalizeCols").addEventListener("click",equalizeColumns);
 
 $("firstHeader").addEventListener("change",()=>{renderPreview();saveState();});
+$("activeImageGridGap").addEventListener("input",event=>{
+  imageGridGap=clampImageGridGap(event.target.value);
+  renderPreview();saveState();
+});
 ["tableWidth","headerBg","headerText","bodyBg","bodyText","borderColor","fontSize","textAlign","cellPadding"].forEach(id=>$(id).addEventListener("input",()=>{pullStyle();updateTableWidthUi();renderPreview();saveState();}));
 $("tableWidthUnit").addEventListener("change",()=>{
   const percentMode=$("tableWidthUnit").value==="percent";
