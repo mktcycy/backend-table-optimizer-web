@@ -29,6 +29,7 @@ let columnWidths = Array(4).fill(DEFAULT_COLUMN_WIDTH);
 let storageAvailable = true;
 let layoutMode = "table";
 let imageGridGap = 4;
+let imageGridColumns = 2;
 let modeDrafts = {"table":null,"image-grid":null};
 
 const $ = id => document.getElementById(id);
@@ -581,6 +582,7 @@ function currentDraft(){
     columnWidths:[...columnWidths],
     firstHeader:$("firstHeader").checked,
     imageGridGap,
+    imageGridColumns,
     styleSettings:{...styleSettings}
   };
 }
@@ -591,10 +593,11 @@ function restoreDraft(draft,mode){
     merges=(draft.merges||[]).map(merge=>({...merge}));
     columnWidths=draft.columnWidths?.length?[...draft.columnWidths]:autoColumnWidths(rows);
     imageGridGap=clampImageGridGap(draft.imageGridGap??imageGridGap);
+    if (mode==="image-grid") imageGridColumns=Math.max(1,Math.min(8,Number(draft.imageGridColumns)||draft.rows[0]?.length||2));
     styleSettings={...DEFAULT_STYLE,...(draft.styleSettings||styleSettings)};
     $("firstHeader").checked=mode==="image-grid"?false:draft.firstHeader!==false;
   }else if (mode==="image-grid"){
-    rows=blankMatrix(4,2);merges=[];columnWidths=[DEFAULT_COLUMN_WIDTH,DEFAULT_COLUMN_WIDTH];
+    imageGridColumns=2;rows=blankMatrix(4,imageGridColumns);merges=[];columnWidths=Array(imageGridColumns).fill(DEFAULT_COLUMN_WIDTH);
     imageGridGap=4;$("firstHeader").checked=false;
   }else{
     rows=blankMatrix(4,4);merges=[];columnWidths=Array(4).fill(DEFAULT_COLUMN_WIDTH);
@@ -607,13 +610,14 @@ function restoreDraft(draft,mode){
 function updateImageCount(){
   if (!$("imageCountInfo")) return;
   const valid=rows.flat().filter(value=>safeImageUrl(value)).length;
-  $("imageCountInfo").textContent=`${valid} / ${rows.length*2} 張已填入`;
+  $("imageCountInfo").textContent=`${valid} / ${rows.length*imageGridColumns} 張已填入`;
 }
 
 function renderImageUrlList(){
   ensureShape();
-  rows=rows.map(row=>[String(row[0]??""),String(row[1]??"")]);
-  columnWidths=[DEFAULT_COLUMN_WIDTH,DEFAULT_COLUMN_WIDTH];
+  imageGridColumns=Math.max(1,Math.min(8,Number(imageGridColumns)||2));
+  rows=rows.map(row=>Array.from({length:imageGridColumns},(_,ci)=>String(row[ci]??"")));
+  columnWidths=Array(imageGridColumns).fill(DEFAULT_COLUMN_WIDTH);
   const list=$("imageUrlList");
   list.innerHTML="";
   rows.forEach((row,ri)=>{
@@ -636,12 +640,13 @@ function renderImageUrlList(){
     heading.append(number,remove);
     const fields=document.createElement("div");
     fields.className="image-row-fields";
-    ["左圖網址","右圖網址"].forEach((labelText,ci)=>{
+    fields.style.setProperty("--image-columns",String(imageGridColumns));
+    Array.from({length:imageGridColumns},(_,ci)=>ci).forEach(ci=>{
       const label=document.createElement("label");
-      label.textContent=labelText;
+      label.textContent=imageGridColumns===2?(ci===0?"左圖網址":"右圖網址"):`第 ${ci+1} 欄圖片網址`;
       const input=document.createElement("input");
-      input.type="url";input.inputMode="url";input.placeholder="https://example.com/image.jpg";
-      input.value=row[ci];input.setAttribute("aria-label",`第 ${ri+1} 列${ci?"右":"左"}圖網址`);
+      input.type="url";input.inputMode="url";input.placeholder="請填入圖片網址";
+      input.value=row[ci];input.setAttribute("aria-label",`第 ${ri+1} 列第 ${ci+1} 欄圖片網址`);
       input.addEventListener("input",event=>{
         rows[ri][ci]=event.target.value;input.classList.toggle("is-invalid",!!event.target.value&&!safeImageUrl(event.target.value));
         updateImageCount();renderPreview();saveState();
@@ -667,9 +672,10 @@ function updateLayoutModeUi(){
   $("activeImageGridGap").value=String(imageGridGap);
   if (imageMode){
     $("imageGridRows").value=String(rows.length);
+    $("imageGridColumns").value=String(imageGridColumns);
     $("imageGridGap").value=String(imageGridGap);
   }
-  $("copyRich").textContent=imageMode?"複製雙欄圖片":"複製一般表格";
+  $("copyRich").textContent=imageMode?"複製圖片表格":"複製一般表格";
 }
 
 function switchLayoutMode(mode){
@@ -681,7 +687,7 @@ function switchLayoutMode(mode){
   applyStyleInputs();updateLayoutModeUi();
   if (isImageGrid()) renderImageUrlList(); else renderGrid();
   renderPreview();saveState();
-  setStatus(isImageGrid()?"已切換至雙欄圖片模式":"已切換至一般表格模式");
+  setStatus(isImageGrid()?"已切換至圖片表格模式":"已切換至一般表格模式");
 }
 
 function buildHtml(){
@@ -717,24 +723,31 @@ function buildHtml(){
 
   if (imageMode){
     const gap=clampImageGridGap(imageGridGap);
-    const imageWidth=Math.max(1,Math.floor((scaleTotal-gap)/2));
-    const rightWidth=Math.max(1,scaleTotal-gap-imageWidth);
+    const columnCount=Math.max(1,Math.min(8,imageGridColumns));
+    const availableWidth=Math.max(columnCount,scaleTotal-gap*(columnCount-1));
+    let remainingImageWidth=availableWidth;
+    const imageWidths=Array.from({length:columnCount},(_,ci)=>{
+      const columnsAfter=columnCount-ci-1;
+      if (!columnsAfter) return Math.max(1,remainingImageWidth);
+      const width=Math.max(1,Math.floor(remainingImageWidth/(columnsAfter+1)));
+      remainingImageWidth-=width;
+      return width;
+    });
     const tableStyle=`width:${tableWidthToken}!important;max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed!important;text-align:center;color:${btx};font:${size}px ${compactFontFamily()}`;
     let imageHtml=`<table border=0 cellspacing=0 cellpadding=0 width="${tableWidthAttr}" style="${tableStyle}">`;
-    imageHtml+=`<colgroup><col width="${imageWidth}" style="width:${widthCss(imageWidth)}!important">${gap?`<col width="${gap}" style="width:${widthCss(gap)}!important">`:""}<col width="${rightWidth}" style="width:${widthCss(rightWidth)}!important"></colgroup>`;
+    imageHtml+="<colgroup>"+imageWidths.map((width,ci)=>`<col width="${width}" style="width:${widthCss(width)}!important">${gap&&ci<columnCount-1?`<col width="${gap}" style="width:${widthCss(gap)}!important">`:""}`).join("")+"</colgroup>";
     rows.forEach((row,ri)=>{
       imageHtml+="<tr>";
-      [0,1].forEach(ci=>{
-        const width=ci===0?imageWidth:rightWidth;
+      imageWidths.forEach((width,ci)=>{
         const imageUrl=safeImageUrl(row[ci]);
         const content=imageUrl
           ?`<img src="${esc(imageUrl)}" width="100%" alt="" style="display:block;width:100%!important;max-width:100%;height:auto!important;border:0!important;margin:0!important;padding:0!important">`
-          :`【貼上圖片網址 ${ri*2+ci+1}】`;
+          :`【請填入圖片網址 ${ri*columnCount+ci+1}】`;
         imageHtml+=`<td width="${widthAttr(width)}" style="width:${widthCss(width)}!important;vertical-align:top;padding:0">${content}</td>`;
-        if (ci===0&&gap) imageHtml+=`<td width="${gap}" style="width:${widthCss(gap)}!important;min-width:${gap}px!important;padding:0;font-size:0;line-height:0"><img src="${WIDTH_SPACER_SRC}" width="${gap}" height="1" alt="" style="display:block;width:${gap}px!important;min-width:${gap}px!important;height:1px!important;border:0!important;margin:0!important;padding:0!important"></td>`;
+        if (gap&&ci<columnCount-1) imageHtml+=`<td width="${gap}" style="width:${widthCss(gap)}!important;min-width:${gap}px!important;padding:0;font-size:0;line-height:0"><img src="${WIDTH_SPACER_SRC}" width="${gap}" height="1" alt="" style="display:block;width:${gap}px!important;min-width:${gap}px!important;height:1px!important;border:0!important;margin:0!important;padding:0!important"></td>`;
       });
       imageHtml+="</tr>";
-      if (gap&&ri<rows.length-1) imageHtml+=`<tr><td colspan=3 height="${gap}" style="height:${gap}px!important;padding:0;font-size:0;line-height:0"><img src="${WIDTH_SPACER_SRC}" width="1" height="${gap}" alt="" style="display:block;width:1px!important;height:${gap}px!important;min-height:${gap}px!important;border:0!important;margin:0!important;padding:0!important"></td></tr>`;
+      if (gap&&ri<rows.length-1) imageHtml+=`<tr><td colspan="${columnCount*2-1}" height="${gap}" style="height:${gap}px!important;padding:0;font-size:0;line-height:0"><img src="${WIDTH_SPACER_SRC}" width="1" height="${gap}" alt="" style="display:block;width:1px!important;height:${gap}px!important;min-height:${gap}px!important;border:0!important;margin:0!important;padding:0!important"></td></tr>`;
     });
     imageHtml+="</table>";
     return imageHtml;
@@ -826,7 +839,7 @@ function renderPreview(){
 function currentState(){
   modeDrafts[layoutMode]=currentDraft();
   return {
-    schemaVersion:17,
+    schemaVersion:18,
     rows,
     merges,
     columnWidths,
@@ -834,6 +847,7 @@ function currentState(){
     styleSettings,
     layoutMode,
     imageGridGap,
+    imageGridColumns,
     modeDrafts
   };
 }
@@ -907,6 +921,8 @@ function loadState(){
     layoutMode = state.layoutMode === "image-grid" ? "image-grid" : "table";
     imageGridGap = clampImageGridGap(state.imageGridGap ?? 4);
     if (state.modeDrafts && typeof state.modeDrafts==="object") modeDrafts={...modeDrafts,...state.modeDrafts};
+    const savedImageColumns=state.imageGridColumns??state.modeDrafts?.["image-grid"]?.imageGridColumns??state.modeDrafts?.["image-grid"]?.rows?.[0]?.length;
+    imageGridColumns=Math.max(1,Math.min(8,Number(savedImageColumns)||(layoutMode==="image-grid"?rows[0]?.length:2)||2));
     $("firstHeader").checked = state.firstHeader !== false;
   }
   ensureShape(); applyStyleInputs(); updateLayoutModeUi();
@@ -1102,22 +1118,31 @@ $("createBlank").addEventListener("click",()=>{
 
 $("createImageGrid").addEventListener("click",()=>{
   const rowCount=Math.max(1,Math.min(50,Number($("imageGridRows").value)||1));
+  imageGridColumns=Math.max(1,Math.min(8,Number($("imageGridColumns").value)||1));
   imageGridGap=clampImageGridGap($("imageGridGap").value);
-  rows=Array.from({length:rowCount},(_,ri)=>[String(rows[ri]?.[0]??""),String(rows[ri]?.[1]??"")]);
-  columnWidths=[DEFAULT_COLUMN_WIDTH,DEFAULT_COLUMN_WIDTH];
+  rows=Array.from({length:rowCount},(_,ri)=>Array.from({length:imageGridColumns},(_,ci)=>String(rows[ri]?.[ci]??"")));
+  columnWidths=Array(imageGridColumns).fill(DEFAULT_COLUMN_WIDTH);
   merges=[];
   selection=null;
   layoutMode="image-grid";
   styleSettings={...styleSettings,tableWidth:100,tableWidthUnit:"percent",textAlign:"center",cellPadding:0};
   $("firstHeader").checked=false;
   applyStyleInputs();updateLayoutModeUi();renderImageUrlList();renderPreview();saveState();
-  setStatus(`已套用 ${rowCount} 列雙欄圖片版型`);
+  setStatus(`已套用 ${rowCount} 列 × ${imageGridColumns} 欄圖片表格`);
 });
 
 $("addImageRow").addEventListener("click",()=>{
   if (rows.length>=50) return setStatus("最多 50 列圖片。",true);
-  rows.push(["",""]);$("imageGridRows").value=String(rows.length);
+  rows.push(Array(imageGridColumns).fill(""));$("imageGridRows").value=String(rows.length);
   renderImageUrlList();renderPreview();saveState();setStatus(`已新增第 ${rows.length} 列圖片`);
+});
+
+$("addImageColumn").addEventListener("click",()=>{
+  if (imageGridColumns>=8) return setStatus("圖片表格最多 8 欄。",true);
+  imageGridColumns+=1;rows=rows.map(row=>[...row,""]);
+  columnWidths=Array(imageGridColumns).fill(DEFAULT_COLUMN_WIDTH);
+  $("imageGridColumns").value=String(imageGridColumns);
+  renderImageUrlList();renderPreview();saveState();setStatus(`已增加第 ${imageGridColumns} 欄，所有欄位會自動等寬`);
 });
 
 document.querySelectorAll("[data-layout-target]").forEach(button=>button.addEventListener("click",()=>switchLayoutMode(button.dataset.layoutTarget)));

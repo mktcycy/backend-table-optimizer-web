@@ -6,13 +6,13 @@
   <meta name="description" content="貼上試算表或圖片網址，快速製作可貼入舊式後台編輯器的表格版型。">
   <meta name="theme-color" content="#ffffff">
   <title>後台表格優化工具</title>
-  <link rel="stylesheet" href="popup.css?v=1.12">
+  <link rel="stylesheet" href="popup.css?v=1.13">
 </head>
 <body>
   <header class="site-header">
     <div class="header-inner">
       <div class="brand-block"><span class="brand-mark" aria-hidden="true">表</span><div><h1>後台表格優化工具</h1><p>整理完成後，一鍵複製到後台</p></div></div>
-      <div class="header-actions"><span class="privacy-note"><span class="privacy-dot" aria-hidden="true"></span>資料只存在這台裝置</span><span class="badge">Web v1.12</span><a class="header-link" href="#output">查看預覽</a></div>
+      <div class="header-actions"><span class="privacy-note"><span class="privacy-dot" aria-hidden="true"></span>資料只存在這台裝置</span><span class="badge">Web v1.13</span><a class="header-link" href="#output">查看預覽</a></div>
     </div>
   </header>
 
@@ -21,7 +21,7 @@
       <div class="mode-heading"><h2 id="modeTitle">你想製作什麼？</h2><p>選擇後只會顯示需要的工具。</p></div>
       <div class="mode-switch" role="tablist" aria-label="製作模式">
         <button id="tableModeBtn" class="mode-button" type="button" role="tab" aria-selected="true" data-layout-target="table"><span class="mode-icon" aria-hidden="true">▤</span><span><strong>一般表格</strong><small>貼上試算表、調整欄寬與合併</small></span></button>
-        <button id="imageModeBtn" class="mode-button" type="button" role="tab" aria-selected="false" data-layout-target="image-grid"><span class="mode-icon" aria-hidden="true">▦</span><span><strong>雙欄圖片</strong><small>貼入圖片網址，自動排成左右兩欄</small></span></button>
+        <button id="imageModeBtn" class="mode-button" type="button" role="tab" aria-selected="false" data-layout-target="image-grid"><span class="mode-icon" aria-hidden="true">▦</span><span><strong>圖片表格</strong><small>貼入圖片網址，自訂列數與欄數</small></span></button>
       </div>
     </section>
 
@@ -36,8 +36,8 @@
     </section>
 
     <section id="imageEditor" class="panel workflow-panel image-editor-panel" data-mode-only="image-grid" hidden>
-      <div class="section-head compact-head"><div class="section-title"><div><h2>貼入圖片網址</h2><p>每列放左、右兩張圖片；輸出時圖片寬度固定為 100%。</p></div></div><span id="imageCountInfo" class="info-chip">0 / 8 張已填入</span></div>
-      <div class="image-setup"><label>列數<input id="imageGridRows" type="number" min="1" max="50" value="4"></label><label>圖片間距<select id="imageGridGap"><option value="0">0 px</option><option value="4" selected>4 px</option><option value="6">6 px</option><option value="8">8 px</option></select></label><button id="createImageGrid" type="button" class="secondary">套用列數</button><button id="addImageRow" type="button" class="primary-soft">＋ 新增一列</button></div>
+      <div class="section-head compact-head"><div class="section-title"><div><h2>編輯圖片表格</h2><p>每格填入一張圖片網址；所有欄位自動等寬，圖片寬度固定為 100%。</p></div></div><span id="imageCountInfo" class="info-chip">0 / 8 張已填入</span></div>
+      <div class="image-setup"><label>列數<input id="imageGridRows" type="number" min="1" max="50" value="4"></label><label>欄數<input id="imageGridColumns" type="number" min="1" max="8" value="2"></label><label>圖片間距<select id="imageGridGap"><option value="0">0 px</option><option value="4" selected>4 px</option><option value="6">6 px</option><option value="8">8 px</option></select></label><button id="createImageGrid" type="button" class="secondary">套用列欄</button><button id="addImageRow" type="button" class="primary-soft">＋ 新增一列</button><button id="addImageColumn" type="button" class="primary-soft">＋ 增加一欄</button></div>
       <div id="imageUrlList" class="image-url-list" aria-label="圖片網址列表"></div>
     </section>
 
@@ -56,7 +56,7 @@
           <div class="card-head"><div><h3>輸出設定</h3><p>只調整貼到後台後真正需要的樣式</p></div><span class="live-chip">即時更新</span></div>
           <div class="basic-style-grid"><label>表格總寬度<span class="unit-input table-width-input"><input type="number" id="tableWidth" min="200" max="1000" step="50" value="100"><select id="tableWidthUnit" aria-label="表格寬度單位"><option value="px">px</option><option value="percent" selected>%</option></select></span></label><label data-mode-only="table">字體大小<span class="unit-input"><input type="number" id="fontSize" min="10" max="24" value="14"><span>px</span></span></label><label data-mode-only="table">文字對齊<select id="textAlign"><option value="center">置中</option><option value="left">靠左</option><option value="right">靠右</option></select></label></div>
           <label class="switch-row" data-mode-only="table"><span><strong>第一列為表頭</strong><small>套用表頭底色與粗體</small></span><input id="firstHeader" type="checkbox" checked></label>
-          <div id="imageGridStyle" class="image-grid-style" data-mode-only="image-grid" hidden><span><strong>圖片間距</strong><small>同時套用到左右與上下間距</small></span><label><span class="unit-input"><input id="activeImageGridGap" type="number" min="0" max="20" step="1" value="4"><span>px</span></span></label></div>
+          <div id="imageGridStyle" class="image-grid-style" data-mode-only="image-grid" hidden><span><strong>圖片表格</strong><small>各欄等寬，圖片固定填滿欄寬</small></span><label>間距<span class="unit-input"><input id="activeImageGridGap" type="number" min="0" max="20" step="1" value="4"><span>px</span></span></label></div>
           <details class="advanced-style" data-mode-only="table"><summary>進階外觀設定</summary><div class="color-grid"><label>表頭底色<input type="color" id="headerBg" value="#EAF4FF"></label><label>表頭文字<input type="color" id="headerText" value="#168CFF"></label><label>內容底色<input type="color" id="bodyBg" value="#FFFFFF"></label><label>內容文字<input type="color" id="bodyText" value="#111111"></label><label>框線顏色<input type="color" id="borderColor" value="#222222"></label><label>格內間距<span class="unit-input"><input type="number" id="cellPadding" min="0" max="20" value="4"><span>px</span></span></label></div></details>
         </div>
         <div class="preview-card"><div class="card-head preview-card-head"><div><h3>輸出預覽</h3><p id="previewWidthHint">表格寬度會隨後台內容區縮放。</p></div><span id="byteText" class="byte-count">0 / 65,536 Byte</span></div><div class="byte-box"><div class="meter" aria-hidden="true"><span id="byteBar"></span></div><p id="byteHint" class="hint">採 UTF-8 計算。</p></div><div id="preview" class="preview"></div></div>
@@ -65,6 +65,6 @@
   </main>
 
   <footer><div class="footer-status"><span class="status-dot" aria-hidden="true"></span><div id="status" aria-live="polite">準備完成</div></div><button id="copyRich" type="button" class="copy-button">複製一般表格</button></footer>
-  <script src="popup.js?v=1.12"></script>
+  <script src="popup.js?v=1.13"></script>
 </body>
 </html>
