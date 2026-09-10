@@ -612,6 +612,32 @@ function buildHtml(){
   // width 屬性使用數字作為舊式編輯器的比例提示；現代瀏覽器則採用下方的 CSS 單位。
   const widthAttr=value=>String(value);
   const widthCss=value=>percentMode?`${formatPercent(value/10)}%`:`${value}px`;
+
+  if (imageMode){
+    const gap=clampImageGridGap(imageGridGap);
+    const imageWidth=Math.max(1,Math.floor((scaleTotal-gap)/2));
+    const rightWidth=Math.max(1,scaleTotal-gap-imageWidth);
+    const tableStyle=`width:${tableWidthToken}!important;max-width:100%;margin:auto;border-collapse:collapse;table-layout:fixed!important;text-align:center;color:${btx};font:${size}px ${compactFontFamily()}`;
+    let imageHtml=`<table border=0 cellspacing=0 cellpadding=0 width="${tableWidthAttr}" style="${tableStyle}">`;
+    imageHtml+=`<colgroup><col width="${imageWidth}" style="width:${widthCss(imageWidth)}!important">${gap?`<col width="${gap}" style="width:${widthCss(gap)}!important">`:""}<col width="${rightWidth}" style="width:${widthCss(rightWidth)}!important"></colgroup>`;
+    rows.forEach((row,ri)=>{
+      imageHtml+="<tr>";
+      [0,1].forEach(ci=>{
+        const width=ci===0?imageWidth:rightWidth;
+        const imageUrl=safeImageUrl(row[ci]);
+        const content=imageUrl
+          ?`<img src="${esc(imageUrl)}" width="100%" alt="" style="display:block;width:100%!important;max-width:100%;height:auto!important;border:0!important;margin:0!important;padding:0!important">`
+          :`【貼上圖片網址 ${ri*2+ci+1}】`;
+        imageHtml+=`<td width="${widthAttr(width)}" style="width:${widthCss(width)}!important;vertical-align:top;padding:0">${content}</td>`;
+        if (ci===0&&gap) imageHtml+=`<td width="${gap}" style="width:${widthCss(gap)}!important;min-width:${gap}px!important;padding:0;font-size:0;line-height:0"><img src="${WIDTH_SPACER_SRC}" width="${gap}" height="1" alt="" style="display:block;width:${gap}px!important;min-width:${gap}px!important;height:1px!important;border:0!important;margin:0!important;padding:0!important"></td>`;
+      });
+      imageHtml+="</tr>";
+      if (gap&&ri<rows.length-1) imageHtml+=`<tr><td colspan=3 height="${gap}" style="height:${gap}px!important;padding:0;font-size:0;line-height:0"><img src="${WIDTH_SPACER_SRC}" width="1" height="${gap}" alt="" style="display:block;width:1px!important;height:${gap}px!important;min-height:${gap}px!important;border:0!important;margin:0!important;padding:0!important"></td></tr>`;
+    });
+    imageHtml+="</table>";
+    return imageHtml;
+  }
+
   // 尋找沒有跨欄、且不是由上方 rowspan 覆蓋的完整列，放置透明寬度支撐。
   // BBIN 等舊式編輯器即使刪除 table/td 的寬度，仍會保留圖片本身的尺寸。
   const sizingRowIndex=rows.findIndex((_,ri)=>rows[0].every((__,ci)=>{
@@ -697,7 +723,7 @@ function renderPreview(){
 
 function currentState(){
   return {
-    schemaVersion:15,
+    schemaVersion:16,
     rows,
     merges,
     columnWidths,
