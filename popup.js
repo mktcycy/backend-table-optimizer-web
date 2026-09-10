@@ -29,6 +29,7 @@ let columnWidths = Array(4).fill(DEFAULT_COLUMN_WIDTH);
 let storageAvailable = true;
 let layoutMode = "table";
 let imageGridGap = 4;
+let modeDrafts = {"table":null,"image-grid":null};
 
 const $ = id => document.getElementById(id);
 
@@ -573,13 +574,114 @@ function isImageGrid(){
   return layoutMode === "image-grid";
 }
 
+function currentDraft(){
+  return {
+    rows:rows.map(row=>[...row]),
+    merges:merges.map(merge=>({...merge})),
+    columnWidths:[...columnWidths],
+    firstHeader:$("firstHeader").checked,
+    imageGridGap,
+    styleSettings:{...styleSettings}
+  };
+}
+
+function restoreDraft(draft,mode){
+  if (draft?.rows?.length){
+    rows=draft.rows.map(row=>[...row]);
+    merges=(draft.merges||[]).map(merge=>({...merge}));
+    columnWidths=draft.columnWidths?.length?[...draft.columnWidths]:autoColumnWidths(rows);
+    imageGridGap=clampImageGridGap(draft.imageGridGap??imageGridGap);
+    styleSettings={...DEFAULT_STYLE,...(draft.styleSettings||styleSettings)};
+    $("firstHeader").checked=mode==="image-grid"?false:draft.firstHeader!==false;
+  }else if (mode==="image-grid"){
+    rows=blankMatrix(4,2);merges=[];columnWidths=[DEFAULT_COLUMN_WIDTH,DEFAULT_COLUMN_WIDTH];
+    imageGridGap=4;$("firstHeader").checked=false;
+  }else{
+    rows=blankMatrix(4,4);merges=[];columnWidths=Array(4).fill(DEFAULT_COLUMN_WIDTH);
+    $("firstHeader").checked=true;
+  }
+  selection=null;
+  ensureShape();
+}
+
+function updateImageCount(){
+  if (!$("imageCountInfo")) return;
+  const valid=rows.flat().filter(value=>safeImageUrl(value)).length;
+  $("imageCountInfo").textContent=`${valid} / ${rows.length*2} 張已填入`;
+}
+
+function renderImageUrlList(){
+  ensureShape();
+  rows=rows.map(row=>[String(row[0]??""),String(row[1]??"")]);
+  columnWidths=[DEFAULT_COLUMN_WIDTH,DEFAULT_COLUMN_WIDTH];
+  const list=$("imageUrlList");
+  list.innerHTML="";
+  rows.forEach((row,ri)=>{
+    const item=document.createElement("div");
+    item.className="image-url-row";
+    const heading=document.createElement("div");
+    heading.className="image-row-heading";
+    const number=document.createElement("strong");
+    number.textContent=`第 ${ri+1} 列`;
+    const remove=document.createElement("button");
+    remove.type="button";remove.className="image-remove-button";remove.textContent="移除";
+    remove.disabled=rows.length===1;
+    remove.setAttribute("aria-label",`移除第 ${ri+1} 列圖片`);
+    remove.addEventListener("click",()=>{
+      if (rows.length===1) return;
+      rows.splice(ri,1);renderImageUrlList();renderPreview();saveState();
+      $("imageGridRows").value=String(rows.length);
+      setStatus(`已移除第 ${ri+1} 列圖片`);
+    });
+    heading.append(number,remove);
+    const fields=document.createElement("div");
+    fields.className="image-row-fields";
+    ["左圖網址","右圖網址"].forEach((labelText,ci)=>{
+      const label=document.createElement("label");
+      label.textContent=labelText;
+      const input=document.createElement("input");
+      input.type="url";input.inputMode="url";input.placeholder="https://example.com/image.jpg";
+      input.value=row[ci];input.setAttribute("aria-label",`第 ${ri+1} 列${ci?"右":"左"}圖網址`);
+      input.addEventListener("input",event=>{
+        rows[ri][ci]=event.target.value;input.classList.toggle("is-invalid",!!event.target.value&&!safeImageUrl(event.target.value));
+        updateImageCount();renderPreview();saveState();
+      });
+      input.classList.toggle("is-invalid",!!input.value&&!safeImageUrl(input.value));
+      label.appendChild(input);fields.appendChild(label);
+    });
+    item.append(heading,fields);list.appendChild(item);
+  });
+  updateImageCount();
+}
+
 function updateLayoutModeUi(){
   const imageMode=isImageGrid();
-  const headerToggle=$("firstHeader");
-  headerToggle.disabled=imageMode;
-  headerToggle.closest(".switch-row")?.classList.toggle("is-disabled",imageMode);
-  $("imageGridStyle").hidden=!imageMode;
+  document.querySelectorAll("[data-mode-only]").forEach(element=>{
+    element.hidden=element.dataset.modeOnly!==layoutMode;
+  });
+  document.querySelectorAll("[data-layout-target]").forEach(button=>{
+    const active=button.dataset.layoutTarget===layoutMode;
+    button.classList.toggle("is-active",active);
+    button.setAttribute("aria-selected",String(active));
+  });
   $("activeImageGridGap").value=String(imageGridGap);
+  if (imageMode){
+    $("imageGridRows").value=String(rows.length);
+    $("imageGridGap").value=String(imageGridGap);
+  }
+  $("copyRich").textContent=imageMode?"複製雙欄圖片":"複製一般表格";
+}
+
+function switchLayoutMode(mode){
+  if (!["table","image-grid"].includes(mode)||mode===layoutMode) return;
+  modeDrafts[layoutMode]=currentDraft();
+  layoutMode=mode;
+  restoreDraft(modeDrafts[mode],mode);
+  if (mode==="image-grid"&&!modeDrafts[mode]) styleSettings={...styleSettings,tableWidth:100,tableWidthUnit:"percent",textAlign:"center",cellPadding:0};
+  applyStyleInputs();updateLayoutModeUi();
+  if (isImageGrid()) renderImageUrlList(); else renderGrid();
+  renderPreview();saveState();
+  setStatus(isImageGrid()?"已切換至雙欄圖片模式":"已切換至一般表格模式");
 }
 
 function buildHtml(){
@@ -722,15 +824,17 @@ function renderPreview(){
 }
 
 function currentState(){
+  modeDrafts[layoutMode]=currentDraft();
   return {
-    schemaVersion:16,
+    schemaVersion:17,
     rows,
     merges,
     columnWidths,
     firstHeader:$("firstHeader").checked,
     styleSettings,
     layoutMode,
-    imageGridGap
+    imageGridGap,
+    modeDrafts
   };
 }
 
@@ -802,9 +906,12 @@ function loadState(){
     styleSettings = {...DEFAULT_STYLE,...(state.styleSettings||{})};
     layoutMode = state.layoutMode === "image-grid" ? "image-grid" : "table";
     imageGridGap = clampImageGridGap(state.imageGridGap ?? 4);
+    if (state.modeDrafts && typeof state.modeDrafts==="object") modeDrafts={...modeDrafts,...state.modeDrafts};
     $("firstHeader").checked = state.firstHeader !== false;
   }
-  ensureShape(); applyStyleInputs(); updateLayoutModeUi(); renderGrid(); renderPreview(); saveState();
+  ensureShape(); applyStyleInputs(); updateLayoutModeUi();
+  if (isImageGrid()) renderImageUrlList(); else renderGrid();
+  renderPreview(); saveState();
 }
 
 function setStatus(msg,error=false){
@@ -996,16 +1103,24 @@ $("createBlank").addEventListener("click",()=>{
 $("createImageGrid").addEventListener("click",()=>{
   const rowCount=Math.max(1,Math.min(50,Number($("imageGridRows").value)||1));
   imageGridGap=clampImageGridGap($("imageGridGap").value);
-  rows=blankMatrix(rowCount,2);
+  rows=Array.from({length:rowCount},(_,ri)=>[String(rows[ri]?.[0]??""),String(rows[ri]?.[1]??"")]);
   columnWidths=[DEFAULT_COLUMN_WIDTH,DEFAULT_COLUMN_WIDTH];
   merges=[];
   selection=null;
   layoutMode="image-grid";
   styleSettings={...styleSettings,tableWidth:100,tableWidthUnit:"percent",textAlign:"center",cellPadding:0};
   $("firstHeader").checked=false;
-  applyStyleInputs();updateLayoutModeUi();renderGrid();renderPreview();saveState();
-  setStatus(`已建立 ${rowCount} 列雙欄圖片版型；請在表格格子貼入圖片網址`);
+  applyStyleInputs();updateLayoutModeUi();renderImageUrlList();renderPreview();saveState();
+  setStatus(`已套用 ${rowCount} 列雙欄圖片版型`);
 });
+
+$("addImageRow").addEventListener("click",()=>{
+  if (rows.length>=50) return setStatus("最多 50 列圖片。",true);
+  rows.push(["",""]);$("imageGridRows").value=String(rows.length);
+  renderImageUrlList();renderPreview();saveState();setStatus(`已新增第 ${rows.length} 列圖片`);
+});
+
+document.querySelectorAll("[data-layout-target]").forEach(button=>button.addEventListener("click",()=>switchLayoutMode(button.dataset.layoutTarget)));
 
 $("addRowAbove").addEventListener("click",()=>{
   if(rows.length>=100) return setStatus("最多 100 列。",true);
@@ -1048,6 +1163,12 @@ $("equalizeCols").addEventListener("click",equalizeColumns);
 $("firstHeader").addEventListener("change",()=>{renderPreview();saveState();});
 $("activeImageGridGap").addEventListener("input",event=>{
   imageGridGap=clampImageGridGap(event.target.value);
+  $("imageGridGap").value=String(imageGridGap);
+  renderPreview();saveState();
+});
+$("imageGridGap").addEventListener("change",event=>{
+  imageGridGap=clampImageGridGap(event.target.value);
+  $("activeImageGridGap").value=String(imageGridGap);
   renderPreview();saveState();
 });
 ["tableWidth","headerBg","headerText","bodyBg","bodyText","borderColor","fontSize","textAlign","cellPadding"].forEach(id=>$(id).addEventListener("input",()=>{pullStyle();updateTableWidthUi();renderPreview();saveState();}));
